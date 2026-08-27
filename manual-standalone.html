@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%237c3aed'/><text x='16' y='22' text-anchor='middle' fill='white' font-family='Arial,sans-serif' font-size='15' font-weight='bold'>UF</text></svg>">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UniFECAF · Manual do Consultor</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@700;800&display=swap" rel="stylesheet">
+<style>
+:root{--purple:#7c3aed;--purple-700:#5b21b6;--orange:#ff6b00;
+  --ink:#0f1b2d;--muted:#7b8aa0;--line:#e6ebf2;--bg:#eef2f7;--card:#fff;
+  --err:#dc2626;--ok:#16a34a;
+  --radius:14px;--shadow-sm:0 2px 10px rgba(7,28,60,.05)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);font-family:'Inter',system-ui,sans-serif;color:var(--ink);min-height:100vh}
+.header{background:linear-gradient(100deg,var(--purple),var(--purple-700));color:#fff;padding:16px 26px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 6px 24px rgba(124,58,237,.28);flex-wrap:wrap;gap:10px}
+.brand{display:flex;align-items:center;gap:12px}
+.brand-mark{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:linear-gradient(135deg,var(--orange),#ff9347);font-weight:800;font-size:18px;box-shadow:0 6px 16px rgba(255,107,0,.45)}
+.brand-title{font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:1.15rem;line-height:1}
+.brand-sub{font-size:.7rem;letter-spacing:2.5px;text-transform:uppercase;opacity:.7;font-weight:600}
+.readonly-tag{background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.28);color:#fff;padding:5px 10px;border-radius:20px;font-size:.7rem;font-weight:700;letter-spacing:.8px;text-transform:uppercase;display:inline-flex;align-items:center;gap:5px;margin-left:10px}
+.header-actions{display:flex;gap:8px}
+.btn-nav{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;padding:9px 14px;border-radius:12px;font-weight:600;font-size:.82rem;text-decoration:none;transition:.2s;display:flex;align-items:center;gap:6px;cursor:pointer}
+.btn-nav:hover{background:rgba(255,255,255,.22);color:#fff}
+
+.wrap{display:grid;grid-template-columns:340px 1fr;gap:20px;max-width:1400px;margin:24px auto;padding:0 22px 40px}
+.card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow-sm);border:1px solid var(--line);overflow:hidden}
+.card-head{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;background:#fbfcfe;gap:8px}
+.card-title{font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;color:var(--purple);font-size:.95rem;margin:0;display:flex;align-items:center;gap:8px}
+.card-body{padding:16px 18px}
+
+.tree-act{background:#f0f2f7;border:none;color:var(--ink);width:28px;height:28px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:.85rem;transition:.12s}
+.tree-act:hover{background:#e6eaf2;color:var(--purple)}
+.busca{padding:10px 14px;border-bottom:1px solid var(--line);background:#fff}
+.busca input{width:100%;padding:8px 12px;border-radius:8px;border:1.5px solid var(--line);font-size:.85rem;font-family:inherit}
+.busca input:focus{outline:none;border-color:var(--purple);box-shadow:0 0 0 3px rgba(124,58,237,.15)}
+.pills-inline{display:flex;gap:3px;background:#f0f2f7;padding:3px;border-radius:8px;margin:4px 0 6px}
+.pill{flex:1;padding:4px 8px;border:none;background:transparent;font-size:.7rem;font-weight:700;color:var(--muted);cursor:pointer;border-radius:6px;transition:.12s;font-family:inherit}
+.pill:hover{color:var(--ink)}
+.pill.active{background:#fff;color:var(--purple);box-shadow:0 1px 3px rgba(7,28,60,.08)}
+
+.tree{padding:12px 8px;max-height:calc(100vh - 300px);overflow-y:auto}
+.node{padding:8px 10px;border-radius:8px;cursor:pointer;font-size:.86rem;display:flex;align-items:center;gap:8px;margin:2px 0;border:1.5px solid transparent;transition:.12s}
+.node:hover{background:#f6f7fb}
+.node.active{background:#f3e8ff;border-color:var(--purple);color:var(--purple);font-weight:700}
+.node .chevron{color:var(--muted);width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;border-radius:4px;transition:transform .15s,background .12s;flex-shrink:0}
+.node .chevron.toggle:hover{background:#e9ecf3;color:var(--purple)}
+.node .chevron.open{transform:rotate(90deg)}
+.node .titulo{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.node .badge-num{font-size:.65rem;background:var(--line);color:var(--muted);padding:2px 6px;border-radius:20px;font-weight:700}
+.node.match .titulo{background:#fef3c7;padding:1px 4px;border-radius:4px}
+
+.view-label{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:0 0 6px}
+.view-value{width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--line);font-size:.9rem;font-family:inherit;color:var(--ink);background:#f8fafc;min-height:42px;white-space:pre-wrap;word-break:break-word}
+.view-value.big{min-height:140px;line-height:1.55}
+.view-row{margin-bottom:16px}
+.view-hint{font-size:.72rem;color:var(--muted);margin-top:4px}
+
+.empty{padding:60px 20px;text-align:center;color:var(--muted)}
+.empty i{font-size:3rem;opacity:.4;display:block;margin-bottom:12px}
+.empty.err{color:var(--err)}
+.empty.err i{color:var(--err);opacity:.7}
+
+.preview-box{background:linear-gradient(135deg,#faf5ff,#f3e8ff);border:1.5px dashed var(--purple);border-radius:12px;padding:14px;margin-top:12px}
+.preview-titulo{font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;color:var(--purple-700);font-size:.95rem;margin:0 0 6px}
+.preview-texto{font-size:.86rem;color:var(--ink);white-space:pre-wrap;line-height:1.55}
+.preview-btns{margin-top:10px;display:flex;gap:6px;flex-wrap:wrap}
+.preview-btn{background:#fff;border:1.5px solid var(--purple);color:var(--purple);padding:6px 12px;border-radius:20px;font-size:.75rem;font-weight:700}
+
+.toast{position:fixed;top:76px;right:22px;padding:12px 18px;border-radius:10px;color:#fff;font-weight:600;font-size:.85rem;box-shadow:0 8px 24px rgba(0,0,0,.15);z-index:9999;transition:.3s;transform:translateX(400px);max-width:340px}
+.toast.show{transform:translateX(0)}
+.toast.ok{background:var(--ok)}
+.toast.err{background:var(--err)}
+
+.btn{border:none;padding:9px 16px;border-radius:10px;font-weight:700;font-size:.83rem;cursor:pointer;transition:.15s;display:inline-flex;align-items:center;gap:6px;text-decoration:none}
+.btn-primary{background:linear-gradient(135deg,var(--purple),var(--purple-700));color:#fff;box-shadow:0 6px 14px rgba(124,58,237,.32)}
+
+.status{font-size:.7rem;color:var(--muted);padding:6px 14px;border-top:1px solid var(--line);background:#fbfcfe;display:flex;justify-content:space-between;align-items:center}
+
+@media(max-width:900px){
+  .wrap{grid-template-columns:1fr;padding:0 12px 40px}
+  .tree{max-height:220px}
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="brand">
+    <div class="brand-mark">UF</div>
+    <div>
+      <div class="brand-title">Manual do Consultor <span class="readonly-tag"><i class="bi bi-eye-fill"></i> Somente leitura</span></div>
+      <div class="brand-sub">CONSULTA</div>
+    </div>
+  </div>
+  <div class="header-actions">
+    <button class="btn-nav" onclick="carregar()" title="Recarregar do banco"><i class="bi bi-arrow-clockwise"></i> Atualizar</button>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="card">
+    <div class="card-head">
+      <h2 class="card-title"><i class="bi bi-diagram-3-fill"></i> Árvore</h2>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button class="tree-act" onclick="expandirTodos()" title="Expandir todos"><i class="bi bi-arrows-expand"></i></button>
+        <button class="tree-act" onclick="recolherTodos()" title="Recolher todos"><i class="bi bi-arrows-collapse"></i></button>
+        <span id="contador" style="font-size:.72rem;color:var(--muted);font-weight:600"></span>
+      </div>
+    </div>
+    <div class="busca">
+      <input id="busca" type="text" placeholder="Buscar no manual..." oninput="renderTree()">
+    </div>
+    <div class="tree" id="tree">
+      <div class="empty"><i class="bi bi-hourglass-split"></i>Carregando...</div>
+    </div>
+    <div class="status" id="status">—</div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <h2 class="card-title" id="editorTitulo"><i class="bi bi-eye-fill"></i> Selecione um item</h2>
+    </div>
+    <div class="card-body" id="editorBody">
+      <div class="empty"><i class="bi bi-hand-index-thumb"></i>Clique num item da árvore para visualizar.</div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// =====================================================================
+// CONFIGURAÇÃO — conexão de leitura com o n8n (que lê do Postgres)
+// =====================================================================
+const ENDPOINT = 'https://plano-acao-high-performace-n8n.szlqqi.easypanel.host/webhook/chat-manual-nos-list';
+// Se o webhook exigir token, cole aqui um token de LEITURA compartilhado.
+// Deixe '' se o endpoint aceita sem token.
+const TOKEN_LEITURA = '';
+// =====================================================================
+
+let nos = [];
+let selecionado = null;
+let expandido = new Set();
+let filtroPorNo = {};
+
+function qs(s){return document.querySelector(s)}
+function esc(s){return (s+'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function toast(msg, tipo){
+  const t = qs('#toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + (tipo||'ok');
+  clearTimeout(t._h);
+  t._h = setTimeout(()=>{t.classList.remove('show')}, 3200);
+}
+function fmtHora(){
+  const d = new Date();
+  return d.toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+
+async function carregar(){
+  qs('#tree').innerHTML = '<div class="empty"><i class="bi bi-hourglass-split"></i>Carregando do banco...</div>';
+  qs('#status').textContent = 'Buscando dados...';
+  try {
+    const url = ENDPOINT + (TOKEN_LEITURA ? (ENDPOINT.includes('?')?'&':'?') + 'token=' + encodeURIComponent(TOKEN_LEITURA) : '');
+    const r = await fetch(url, {cache:'no-store'});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const j = await r.json();
+    const arr = Array.isArray(j) ? j : (Array.isArray(j.nos) ? j.nos : null);
+    if(!arr) throw new Error('Resposta inesperada do servidor.');
+    nos = arr;
+    selecionado = null;
+    expandido = new Set();
+    filtroPorNo = {};
+    qs('#busca').value = '';
+    renderTree();
+    renderView();
+    qs('#contador').textContent = nos.length + ' itens';
+    qs('#status').innerHTML = '<span><i class="bi bi-check-circle-fill" style="color:var(--ok)"></i> Atualizado '+fmtHora()+'</span><span>'+nos.length+' nós</span>';
+  } catch(e){
+    qs('#tree').innerHTML = '<div class="empty err"><i class="bi bi-exclamation-triangle-fill"></i><b>Erro ao carregar</b><div style="margin-top:6px;font-size:.8rem">'+esc(e.message)+'</div><button class="btn btn-primary" style="margin-top:14px" onclick="carregar()"><i class="bi bi-arrow-clockwise"></i> Tentar de novo</button></div>';
+    qs('#status').innerHTML = '<span style="color:var(--err)"><i class="bi bi-exclamation-triangle"></i> '+esc(e.message)+'</span><span>'+fmtHora()+'</span>';
+  }
+}
+
+function filhosDe(pai){
+  return nos.filter(n => (n.pai_id||'') === (pai||'')).sort((a,b) => (a.ordem||0)-(b.ordem||0));
+}
+
+function matchBusca(no, termo){
+  if(!termo) return true;
+  const t = termo.toLowerCase();
+  return (no.titulo||'').toLowerCase().includes(t)
+      || (no.texto||'').toLowerCase().includes(t)
+      || (no.label_botao||'').toLowerCase().includes(t);
+}
+
+function ehModalidade(no, mod){
+  const t = (no.titulo||'').toLowerCase();
+  if(mod === 'ead') return /\bead\b/.test(t);
+  if(mod === 'semi') return /\bsemi\b/.test(t) || t.includes('semipresencial');
+  return true;
+}
+
+function subarvoreTemMatch(no, termo){
+  if(matchBusca(no, termo)) return true;
+  return filhosDe(no.codigo).some(f => subarvoreTemMatch(f, termo));
+}
+
+function ancestralComFiltro(no){
+  let atual = no;
+  while(atual && atual.pai_id){
+    const filtro = filtroPorNo[atual.pai_id];
+    if(filtro && filtro !== 'todos') return { pai: atual.pai_id, filtro };
+    atual = nos.find(n => n.codigo === atual.pai_id);
+  }
+  return null;
+}
+
+function passaFiltroHerdado(no){
+  const anc = ancestralComFiltro(no);
+  if(!anc) return true;
+  return subarvorePreservaModalidade(no, anc.filtro);
+}
+
+function subarvorePreservaModalidade(no, mod){
+  if(ehModalidade(no, mod)) return true;
+  return filhosDe(no.codigo).some(f => subarvorePreservaModalidade(f, mod));
+}
+
+function setFiltroNo(codigo, mod){
+  if(mod === 'todos') delete filtroPorNo[codigo];
+  else filtroPorNo[codigo] = mod;
+  renderTree();
+}
+
+function temFilhosModalidade(codigo){
+  const filhos = filhosDe(codigo);
+  return filhos.some(f => ehModalidade(f, 'ead') || ehModalidade(f, 'semi'))
+      || filhos.some(f => temFilhosModalidade(f.codigo));
+}
+
+function renderNode(no, nivel, termo){
+  if(termo && !subarvoreTemMatch(no, termo)) return '';
+  if(!passaFiltroHerdado(no)) return '';
+  const filhos = filhosDe(no.codigo);
+  const at = selecionado && selecionado.codigo === no.codigo ? ' active' : '';
+  const isMatch = termo && matchBusca(no, termo);
+  const cls = 'node'+at+(isMatch?' match':'');
+  const aberto = expandido.has(no.codigo) || !!termo;
+  const chevron = filhos.length
+    ? '<span class="chevron toggle'+(aberto?' open':'')+'" onclick="event.stopPropagation();toggleExpand(\''+esc(no.codigo)+'\')"><i class="bi bi-chevron-right"></i></span>'
+    : '<span class="chevron">·</span>';
+  const badge = filhos.length ? '<span class="badge-num">'+filhos.length+'</span>' : '';
+  let html = '<div class="'+cls+'" style="margin-left:'+(nivel*16)+'px" onclick="clicarNo(\''+esc(no.codigo)+'\')">'
+    + chevron
+    + '<span class="titulo">'+esc(no.titulo)+'</span>'
+    + badge
+    + '</div>';
+  if(aberto){
+    if(filhos.length && temFilhosModalidade(no.codigo)){
+      const at = filtroPorNo[no.codigo] || 'todos';
+      html += '<div class="pills-inline" style="margin-left:'+((nivel+1)*16)+'px">'
+        + '<button class="pill'+(at==='todos'?' active':'')+'" onclick="event.stopPropagation();setFiltroNo(\''+esc(no.codigo)+'\',\'todos\')">Todos</button>'
+        + '<button class="pill'+(at==='ead'?' active':'')+'" onclick="event.stopPropagation();setFiltroNo(\''+esc(no.codigo)+'\',\'ead\')">EAD</button>'
+        + '<button class="pill'+(at==='semi'?' active':'')+'" onclick="event.stopPropagation();setFiltroNo(\''+esc(no.codigo)+'\',\'semi\')">Semi</button>'
+        + '</div>';
+    }
+    for(const f of filhos){ html += renderNode(f, nivel+1, termo); }
+  }
+  return html;
+}
+
+function toggleExpand(codigo){
+  if(expandido.has(codigo)) expandido.delete(codigo);
+  else expandido.add(codigo);
+  renderTree();
+}
+
+function clicarNo(codigo){
+  const no = nos.find(n => n.codigo === codigo);
+  if(!no) return;
+  if(filhosDe(codigo).length && !expandido.has(codigo)) expandido.add(codigo);
+  selecionar(codigo);
+}
+
+function expandirTodos(){
+  expandido = new Set(nos.filter(n => filhosDe(n.codigo).length).map(n => n.codigo));
+  renderTree();
+}
+
+function recolherTodos(){
+  expandido = new Set();
+  renderTree();
+}
+
+function expandirAncestrais(codigo){
+  let atual = nos.find(n => n.codigo === codigo);
+  while(atual && atual.pai_id){
+    expandido.add(atual.pai_id);
+    atual = nos.find(n => n.codigo === atual.pai_id);
+  }
+}
+
+function renderTree(){
+  if(!nos.length) return;
+  const termo = (qs('#busca').value||'').trim();
+  const raizes = filhosDe('');
+  if(!raizes.length){
+    qs('#tree').innerHTML = '<div class="empty"><i class="bi bi-diagram-2"></i>Nenhum nó raiz.</div>';
+    return;
+  }
+  const html = raizes.map(r => renderNode(r, 0, termo)).join('');
+  if(html){ qs('#tree').innerHTML = html; return }
+  const filtroDesc = modalidade !== 'todos' ? modalidade.toUpperCase() : '';
+  const msg = termo && filtroDesc ? 'Nada encontrado para "'+esc(termo)+'" em '+filtroDesc
+            : termo ? 'Nada encontrado para "'+esc(termo)+'".'
+            : filtroDesc ? 'Nada encontrado no filtro '+filtroDesc+'.'
+            : 'Nada encontrado.';
+  qs('#tree').innerHTML = '<div class="empty"><i class="bi bi-search"></i>'+msg+'</div>';
+}
+
+function selecionar(codigo){
+  const no = nos.find(n => n.codigo === codigo);
+  if(!no) return;
+  selecionado = no;
+  expandirAncestrais(codigo);
+  renderTree();
+  renderView();
+}
+
+function nomePai(pai_id){
+  if(!pai_id) return '(raiz — sem pai)';
+  const p = nos.find(n => n.codigo === pai_id);
+  return p ? p.titulo : '('+pai_id+')';
+}
+
+function renderView(){
+  if(!selecionado){
+    qs('#editorTitulo').innerHTML = '<i class="bi bi-eye-fill"></i> Selecione um item';
+    qs('#editorBody').innerHTML = '<div class="empty"><i class="bi bi-hand-index-thumb"></i>Clique num item da árvore para visualizar.</div>';
+    return;
+  }
+  const no = selecionado;
+  const fs = filhosDe(no.codigo);
+
+  qs('#editorTitulo').innerHTML = '<i class="bi bi-eye-fill"></i> '+esc(no.titulo);
+
+  qs('#editorBody').innerHTML =
+    '<div class="view-row">'
+    +   '<div class="view-label">Título</div>'
+    +   '<div class="view-value">'+esc(no.titulo||'—')+'</div>'
+    + '</div>'
+    + (no.label_botao ? '<div class="view-row">'
+    +   '<div class="view-label">Label do botão</div>'
+    +   '<div class="view-value">'+esc(no.label_botao)+'</div>'
+    + '</div>' : '')
+    + '<div class="view-row">'
+    +   '<div class="view-label">Texto / script</div>'
+    +   '<div class="view-value big">'+esc(no.texto||'—')+'</div>'
+    + '</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+    +   '<div class="view-row">'
+    +     '<div class="view-label">Pai</div>'
+    +     '<div class="view-value">'+esc(nomePai(no.pai_id))+'</div>'
+    +   '</div>'
+    +   '<div class="view-row">'
+    +     '<div class="view-label">Ordem</div>'
+    +     '<div class="view-value">'+(+no.ordem||0)+'</div>'
+    +   '</div>'
+    + '</div>'
+    + '<div style="font-size:.72rem;color:var(--muted);margin-top:8px">Código: <code>'+esc(no.codigo||'—')+'</code></div>'
+    + '<div class="preview-box">'
+    +   '<div style="font-size:.65rem;font-weight:800;color:var(--purple);letter-spacing:1px;margin-bottom:6px">PRÉVIA DO CARD</div>'
+    +   '<div class="preview-titulo">'+esc(no.titulo||'(sem título)')+'</div>'
+    +   '<div class="preview-texto">'+esc(no.texto||'(sem texto)')+'</div>'
+    +   (fs.length
+        ? '<div class="preview-btns">' + fs.map(f => '<span class="preview-btn">'+esc(f.label_botao||f.titulo)+'</span>').join('') + '</div>'
+        : '<div style="font-size:.72rem;color:var(--muted);margin-top:8px;font-style:italic">Nó folha (sem opções)</div>')
+    + '</div>';
+}
+
+carregar();
+</script>
+<script src="/version-check.js"></script>
+</body>
+</html>
