@@ -4586,13 +4586,28 @@ window.onload=async ()=>{
   await carregarAtendentes();  // pra mapear dono -> nome/foto na lista
   popularFiltroEtiqueta();     // carrega lista de etiquetas pro dropdown (silencioso, roda em bg)
   carregarMotivos();           // motivos de fechamento (silencioso, roda em bg)
+  // Anti-thundering-herd: cada consultor sai em fase diferente pra não bater servidor todos ao mesmo tempo.
+  // Helper: agenda função pra rodar com intervalo médio ± 20% de jitter e delay inicial aleatório.
+  function agendarComJitter(fn, msMedio, opts){
+    opts = opts || {};
+    const jitterPct = opts.jitterPct != null ? opts.jitterPct : 0.20;
+    const delayInicial = opts.delayInicial != null ? opts.delayInicial : Math.random() * 3000; // 0-3s
+    function tick(){
+      try { fn(); } catch(_){}
+      const jitter = msMedio * jitterPct;
+      const proxMs = msMedio + (Math.random() * jitter * 2 - jitter); // ±jitterPct do msMedio
+      setTimeout(tick, proxMs);
+    }
+    setTimeout(tick, delayInicial);
+  }
+
   checarLinkForcado();         // check inicial de empurrao de atualizacao
-  setInterval(checarLinkForcado, 30000); // a cada 30s
+  agendarComJitter(checarLinkForcado, 30000);
   await carregarContas();
   await carregarConversas();
   atualizarTitulo();
   carregarRetornos();
-  setInterval(carregarRetornos, 30000);
+  agendarComJitter(carregarRetornos, 30000);
   // Heartbeat online (a cada 30s manda ping — usado pela distribuição em massa e afins)
   const pingOnline = () => {
     if(!USUARIO || document.hidden) return; // não faz ping se aba escondida
@@ -4603,7 +4618,7 @@ window.onload=async ()=>{
     }).catch(()=>{});
   };
   pingOnline(); // ping imediato
-  setInterval(pingOnline, 30000);
+  agendarComJitter(pingOnline, 30000);
   // Polling de quem tá online (usado pela bolinha do modal de distribuição)
   const carregarOnline = async () => {
     const r = await safeFetchJson(BASE + '/chat-atendentes-online');
@@ -4611,19 +4626,26 @@ window.onload=async ()=>{
   };
   window.__ONLINE_USERS = new Set();
   carregarOnline();
-  setInterval(carregarOnline, 30000);
-  setInterval(checarRetornosVencidos, 15000);
+  agendarComJitter(carregarOnline, 30000);
+  agendarComJitter(checarRetornosVencidos, 15000);
   carregarTriagensAtivas();
-  setInterval(carregarTriagensAtivas, 15000);
+  agendarComJitter(carregarTriagensAtivas, 15000);
   carregarRespostasRapidas();
-  setInterval(carregarRespostasRapidas, 60000);
-  // Polling inteligente: 5s quando aba visivel, pausa quando escondida
-  const POLL_MS_ATIVO = 5000;   // aba em foco
-  const POLL_MS_INATIVO = 30000; // aba em background (raramente atualiza)
+  agendarComJitter(carregarRespostasRapidas, 60000);
+  // Polling inteligente: 5s quando aba visivel, pausa quando escondida — COM JITTER pra distribuir carga
+  const POLL_MS_ATIVO = 5000;   // aba em foco (varia 4-6s com jitter)
+  const POLL_MS_INATIVO = 30000; // aba em background (varia 24-36s)
   function iniciarPolling(){
-    if(pollTimer) clearInterval(pollTimer);
-    const ms = document.hidden ? POLL_MS_INATIVO : POLL_MS_ATIVO;
-    pollTimer = setInterval(pollAtualizar, ms);
+    if(pollTimer) clearTimeout(pollTimer);
+    function tick(){
+      pollAtualizar();
+      const base = document.hidden ? POLL_MS_INATIVO : POLL_MS_ATIVO;
+      const jitter = base * 0.20;
+      const ms = base + (Math.random() * jitter * 2 - jitter);
+      pollTimer = setTimeout(tick, ms);
+    }
+    // Delay inicial aleatório 0-2s pra evitar pico em massa no login coletivo
+    pollTimer = setTimeout(tick, Math.random() * 2000);
   }
   document.addEventListener('visibilitychange', ()=>{
     iniciarPolling(); // reajusta intervalo
