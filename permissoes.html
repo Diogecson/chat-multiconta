@@ -128,7 +128,7 @@ body{margin:0;background:var(--bg);font-family:'Inter',system-ui,sans-serif;colo
 
 <script>
 const BASE = location.pathname.includes('/webhook/') ? location.origin + '/webhook' : 'https://plano-acao-high-performace-n8n.szlqqi.easypanel.host/webhook';
-const LOGIN_URL = location.pathname.includes('/webhook/') ? '/webhook/chat-login' : '/';
+const LOGIN_URL = location.pathname.includes('/webhook/') ? '/webhook/chat-login' : location.pathname.replace(/[^/]+$/, '');
 let TOKEN='', USUARIO='', PAPEL='';
 let atendentes = [];
 let dados = { permissoes:{}, global:{}, override:null }; // últimos dados carregados

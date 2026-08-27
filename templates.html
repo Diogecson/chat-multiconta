@@ -246,7 +246,7 @@ let templates = [];
 
 function qs(s){return document.querySelector(s)}
 function esc(s){return (s+'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-const LOGIN_URL = location.pathname.includes('/webhook/') ? '/webhook/chat-login' : '/';
+const LOGIN_URL = location.pathname.includes('/webhook/') ? '/webhook/chat-login' : location.pathname.replace(/[^/]+$/, '');
 function sair(){try{localStorage.removeItem('chat_token');localStorage.removeItem('chat_usuario')}catch(_){}location.href=LOGIN_URL}
 
 async function api(path, body){

@@ -4511,7 +4511,9 @@ async function apagarConversa(){
     toast('Conversa apagada','');
   }catch(e){ toast('Erro: '+e.message,'err'); }
 }
-const LOGIN_URL = location.pathname.includes('/webhook/') ? '/webhook/chat-login' : '/';
+const LOGIN_URL = location.pathname.includes('/webhook/')
+  ? '/webhook/chat-login'
+  : location.pathname.replace(/[^/]+$/, ''); // fica no MESMO diretório do chat (funciona em root, subdir de GitHub Pages, etc)
 function sair(){
   try{ localStorage.removeItem('chat_token'); localStorage.removeItem('chat_usuario'); localStorage.removeItem('chat_nome'); localStorage.removeItem('chat_papel'); localStorage.removeItem('chat_foto'); }catch(_){}
   location.href = LOGIN_URL;
