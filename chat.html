@@ -1018,6 +1018,7 @@ body,html{height:100%;margin:0;overflow:hidden;background:var(--bg);
         <button class="dist-btn-clear" onclick="distLimparSel()"><i class="bi bi-x-circle"></i> Limpar</button>
         <button class="dist-btn-go" onclick="abrirDistModal()" data-admin><i class="bi bi-diagram-3"></i> Distribuir</button>
         <button class="dist-btn-go" onclick="abrirDistEnviarModal()" style="background:#f59e0b;color:#fff"><i class="bi bi-send-fill"></i> Enviar msg</button>
+        <button class="dist-btn-go" onclick="abrirFinalizarMassaModal()" style="background:#dc2626;color:#fff" data-admin><i class="bi bi-check2-circle"></i> Finalizar</button>
       </div>
     </div>
     <div class="sb-filtros-wrap" id="sbFiltrosWrap">
@@ -1316,6 +1317,24 @@ body,html{height:100%;margin:0;overflow:hidden;background:var(--bg);
     <div class="dm-foot">
       <button class="dm-btn-cancel" onclick="fecharDistModal()">Cancelar</button>
       <button class="dm-btn-go" id="dmBtnGo" onclick="executarDistribuicao()"><i class="bi bi-send-fill"></i> Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL FINALIZAR EM MASSA -->
+<div class="dm-back" id="fmBack" onclick="if(event.target===this)fecharFinalizarMassa()">
+  <div class="dm-modal">
+    <div class="dm-head">
+      <h3><i class="bi bi-check2-circle"></i> Finalizar <span id="fmCount">0</span> conversas</h3>
+      <button class="dm-close" onclick="fecharFinalizarMassa()"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <div class="dm-body">
+      <div style="margin-bottom:12px;color:#dc2626;font-size:13px"><i class="bi bi-exclamation-triangle-fill"></i> Todas as conversas selecionadas serão finalizadas. Escolha um motivo:</div>
+      <div id="fmMotivosList" style="display:flex;flex-direction:column;gap:6px;max-height:400px;overflow-y:auto"></div>
+      <div id="fmProgress" style="display:none;margin-top:12px;padding:10px;background:#f3f4f6;border-radius:6px;font-size:13px"></div>
+    </div>
+    <div class="dm-foot">
+      <button class="dm-btn-cancel" onclick="fecharFinalizarMassa()">Cancelar</button>
     </div>
   </div>
 </div>
@@ -2829,6 +2848,72 @@ async function executarDistribuicao(){
     btn.innerHTML = '<i class="bi bi-send-fill"></i> Confirmar';
   }
 }
+
+/* ===== FINALIZAR EM MASSA ===== */
+async function abrirFinalizarMassaModal(){
+  if(!window.__DIST_SEL.size){ toast('Selecione pelo menos 1 conversa', 'err'); return; }
+  document.getElementById('fmCount').textContent = window.__DIST_SEL.size;
+  if(!MOTIVOS_CACHE.length) await carregarMotivos();
+  const list = document.getElementById('fmMotivosList');
+  const semMotivoBtn = `<button class="mot-choice" onclick="executarFinalizarMassa('')" style="border-left:4px solid #9ca3af;text-align:left;padding:10px 12px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer">
+    <div style="font-weight:600;color:#374151">Sem motivo</div>
+    <div style="font-size:12px;color:#6b7280">Finaliza sem categorizar</div>
+  </button>`;
+  const motBtns = (MOTIVOS_CACHE||[]).map(m => {
+    return `<button class="mot-choice" onclick="executarFinalizarMassa('${escapeAttr(m.codigo)}')" style="border-left:4px solid ${escapeAttr(m.cor||'#9ca3af')};text-align:left;padding:10px 12px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer">
+      <div style="font-weight:600;color:#374151">${escapeHtml(m.nome)}</div>
+      ${m.descricao?`<div style="font-size:12px;color:#6b7280">${escapeHtml(m.descricao)}</div>`:''}
+    </button>`;
+  }).join('');
+  list.innerHTML = motBtns + semMotivoBtn;
+  document.getElementById('fmProgress').style.display = 'none';
+  document.getElementById('fmBack').classList.add('on');
+}
+
+function fecharFinalizarMassa(){
+  document.getElementById('fmBack').classList.remove('on');
+}
+
+async function executarFinalizarMassa(motivo){
+  if(!window.__DIST_SEL.size){ toast('Sem conversas selecionadas', 'err'); return; }
+  const conversas = Array.from(window.__DIST_SEL).map(k => {
+    const [conta_id, telefone] = k.split(':');
+    return {conta_id, telefone};
+  });
+  const total = conversas.length;
+  const motNome = motivo ? ((MOTIVOS_CACHE||[]).find(m=>m.codigo===motivo)||{}).nome || motivo : '(sem motivo)';
+  if(!confirm('Finalizar ' + total + ' conversas com motivo "' + motNome + '"?\n\nEssa ação NÃO pode ser desfeita em massa.')) return;
+  // Desabilita botões
+  document.querySelectorAll('#fmMotivosList .mot-choice').forEach(b => b.disabled = true);
+  const prog = document.getElementById('fmProgress');
+  prog.style.display = 'block';
+  let ok = 0, erro = 0;
+  // Processa em lotes de 5 pra não travar
+  const BATCH = 5;
+  for(let i = 0; i < conversas.length; i += BATCH){
+    const lote = conversas.slice(i, i + BATCH);
+    await Promise.all(lote.map(async c => {
+      try {
+        const r = await safeFetchJson(BASE + '/chat-conversa-finalizar', {
+          method:'POST',
+          headers:{'Content-Type':'text/plain;charset=UTF-8'},
+          body: JSON.stringify({ conta_id: c.conta_id, telefone: c.telefone, usuario: USUARIO, motivo: motivo || '' })
+        });
+        if(r && r.ok){ ok++; registrarEvento(c.conta_id, c.telefone, 'finalizacao', { motivo: motivo || '', texto: 'finalizou em massa' }); }
+        else erro++;
+      } catch(_){ erro++; }
+    }));
+    prog.innerHTML = 'Processado <b>' + (ok+erro) + '/' + total + '</b> — ✅ ' + ok + ' | ❌ ' + erro;
+  }
+  toast(ok + ' conversas finalizadas' + (erro ? ' ('+erro+' com erro)' : ''), erro ? 'warn' : '');
+  fecharFinalizarMassa();
+  window.__DIST_SEL.clear();
+  window.__DIST_MODE = false;
+  document.getElementById('btnDistToggle').classList.remove('on');
+  document.getElementById('distBar').style.display = 'none';
+  await carregarConversas();
+}
+
 function renderConversas(filtro){
   const list=qs('#convList');
   // Contadores dos badges vem via rota separada /chat-contadores (totais reais do banco).
