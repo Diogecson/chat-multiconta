@@ -1098,6 +1098,11 @@ body,html{height:100%;margin:0;overflow:hidden;background:var(--bg);
         <option value="">Todas etiquetas</option>
       </select>
     </div>
+    <div class="sb-flt-etiqueta">
+      <select id="fltEtiqueta2" onchange="setFiltroEtiqueta2(this.value)" title="Filtrar por 2ª etiqueta (combo AND)">
+        <option value="">+ 2ª etiqueta (opcional)</option>
+      </select>
+    </div>
     <div class="sb-flt-periodo">
       <div class="sb-flt-periodo-row">
         <input type="date" id="fltDataDe" onchange="setFiltroData()" title="Data inicial">
@@ -2444,11 +2449,19 @@ function setFiltroConsultor(usuario){
   carregarContadoresReais();
 }
 let FILTRO_ETIQUETA = '';
+let FILTRO_ETIQUETA2 = '';
 function setFiltroEtiqueta(etiq){
   FILTRO_ETIQUETA = String(etiq||'').trim();
   const sel = qs('#fltEtiqueta');
   if(sel) sel.classList.toggle('active-filter', !!FILTRO_ETIQUETA);
-  if(FILTRO_ETIQUETA && VISAO !== 'todas') setVisao('todas');
+  if((FILTRO_ETIQUETA || FILTRO_ETIQUETA2) && VISAO !== 'todas') setVisao('todas');
+  else renderConversas(qs('#busca').value.toLowerCase().trim());
+}
+function setFiltroEtiqueta2(etiq){
+  FILTRO_ETIQUETA2 = String(etiq||'').trim();
+  const sel = qs('#fltEtiqueta2');
+  if(sel) sel.classList.toggle('active-filter', !!FILTRO_ETIQUETA2);
+  if((FILTRO_ETIQUETA || FILTRO_ETIQUETA2) && VISAO !== 'todas') setVisao('todas');
   else renderConversas(qs('#busca').value.toLowerCase().trim());
 }
 let FILTRO_DATA_DE = ''; // YYYY-MM-DD
@@ -2485,6 +2498,7 @@ function conversaMatchData(c){
 }
 async function popularFiltroEtiqueta(){
   const sel = qs('#fltEtiqueta'); if(!sel) return;
+  const sel2 = qs('#fltEtiqueta2');
   try {
     const r = await api(BASE + '/chat-etiquetas-list');
     const list = (r && r.etiquetas) || [];
@@ -2492,6 +2506,12 @@ async function popularFiltroEtiqueta(){
     sel.innerHTML = '<option value="">Todas etiquetas</option>' +
       list.map(e => `<option value="${escapeHtml(e.etiqueta)}">${escapeHtml(e.etiqueta)} (${e.total})</option>`).join('');
     if(prev) sel.value = prev;
+    if(sel2){
+      const prev2 = sel2.value;
+      sel2.innerHTML = '<option value="">+ 2ª etiqueta (opcional)</option>' +
+        list.map(e => `<option value="${escapeHtml(e.etiqueta)}">${escapeHtml(e.etiqueta)} (${e.total})</option>`).join('');
+      if(prev2) sel2.value = prev2;
+    }
   } catch(_){}
 }
 function motivoDaConversa(c){
@@ -2531,6 +2551,10 @@ function conversaMatchVisao(c){
   if(FILTRO_ETIQUETA){
     const etiqs = Array.isArray(c.etiquetas) ? c.etiquetas : [];
     if(!etiqs.includes(FILTRO_ETIQUETA)) return false;
+  }
+  if(FILTRO_ETIQUETA2){
+    const etiqs = Array.isArray(c.etiquetas) ? c.etiquetas : [];
+    if(!etiqs.includes(FILTRO_ETIQUETA2)) return false;
   }
   if(FILTRO_CONSULTOR){
     if(String(c.dono||'').toLowerCase() !== FILTRO_CONSULTOR) return false;
