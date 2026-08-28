@@ -1019,6 +1019,7 @@ body,html{height:100%;margin:0;overflow:hidden;background:var(--bg);
         <button class="dist-btn-go" onclick="abrirDistModal()" data-admin><i class="bi bi-diagram-3"></i> Distribuir</button>
         <button class="dist-btn-go" onclick="abrirDistEnviarModal()" style="background:#f59e0b;color:#fff"><i class="bi bi-send-fill"></i> Enviar msg</button>
         <button class="dist-btn-go" onclick="abrirFinalizarMassaModal()" style="background:#dc2626;color:#fff" data-admin><i class="bi bi-check2-circle"></i> Finalizar</button>
+        <button class="dist-btn-go" onclick="abrirFecharMassaHS()" style="background:#ff7a59;color:#fff" data-admin title="Fecha deals no HubSpot como perdidos + finaliza chats"><i class="bi bi-bullseye"></i> Fechar HubSpot</button>
       </div>
     </div>
     <div class="sb-filtros-wrap" id="sbFiltrosWrap">
@@ -1335,6 +1336,40 @@ body,html{height:100%;margin:0;overflow:hidden;background:var(--bg);
     </div>
     <div class="dm-foot">
       <button class="dm-btn-cancel" onclick="fecharFinalizarMassa()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL FECHAR EM MASSA NO HUBSPOT -->
+<div class="dm-back" id="hsMassaBack" onclick="if(event.target===this)fecharHSMassa()">
+  <div class="dm-modal" style="max-width:520px">
+    <div class="dm-head" style="background:linear-gradient(135deg,#ff7a59,#f97316);color:#fff">
+      <h3><i class="bi bi-bullseye"></i> Fechar <span id="hsMassaCount">0</span> deals no HubSpot</h3>
+      <button class="dm-close" onclick="fecharHSMassa()" style="color:#fff"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <div class="dm-body">
+      <div style="margin-bottom:10px;color:#dc2626;font-size:13px"><i class="bi bi-exclamation-triangle-fill"></i> Fecha o deal mais recente de cada conversa (etapa de perda + motivo) e finaliza o chat.</div>
+      <label style="display:block;margin-bottom:6px;font-weight:600;font-size:13px">Pipeline</label>
+      <select class="dm-select" id="hsMassaPip" onchange="hsMassaSetPipeline()" style="margin-bottom:12px">
+        <option value="">Carregando pipelines...</option>
+      </select>
+      <label style="display:block;margin-bottom:6px;font-weight:600;font-size:13px">Etapa (perda)</label>
+      <select class="dm-select" id="hsMassaEta" onchange="hsMassaSetEtapa()" style="margin-bottom:12px">
+        <option value="">Escolha uma pipeline primeiro</option>
+      </select>
+      <label style="display:block;margin-bottom:6px;font-weight:600;font-size:13px">Motivo da perda (HubSpot)</label>
+      <select class="dm-select" id="hsMassaMot" style="margin-bottom:12px">
+        <option value="">Escolha uma etapa primeiro</option>
+      </select>
+      <label style="display:block;margin-bottom:6px;font-weight:600;font-size:13px">Motivo do chat (opcional)</label>
+      <select class="dm-select" id="hsMassaMotChat" style="margin-bottom:12px">
+        <option value="">— Sem motivo local —</option>
+      </select>
+      <div id="hsMassaProgress" style="display:none;margin-top:12px;padding:10px;background:#f3f4f6;border-radius:6px;font-size:13px"></div>
+    </div>
+    <div class="dm-foot">
+      <button class="dm-btn-cancel" onclick="fecharHSMassa()">Cancelar</button>
+      <button class="dm-btn-go" id="hsMassaBtnGo" onclick="executarFecharMassaHS()" style="background:linear-gradient(135deg,#ff7a59,#f97316)"><i class="bi bi-bullseye"></i> Fechar tudo</button>
     </div>
   </div>
 </div>
@@ -2912,6 +2947,141 @@ async function executarFinalizarMassa(motivo){
   document.getElementById('btnDistToggle').classList.remove('on');
   document.getElementById('distBar').style.display = 'none';
   await carregarConversas();
+}
+
+/* ===== FECHAR EM MASSA NO HUBSPOT ===== */
+async function abrirFecharMassaHS(){
+  if(!window.__DIST_SEL.size){ toast('Selecione pelo menos 1 conversa', 'err'); return; }
+  document.getElementById('hsMassaCount').textContent = window.__DIST_SEL.size;
+  document.getElementById('hsMassaProgress').style.display = 'none';
+  document.getElementById('hsMassaBtnGo').disabled = false;
+  // Carrega pipelines
+  const selPip = document.getElementById('hsMassaPip');
+  selPip.innerHTML = '<option value="">Carregando...</option>';
+  if(!hsPipelines){
+    try {
+      const rp = await api(HS_BASE + '/hubspot-pipelines');
+      hsPipelines = (rp && rp.ok) ? (rp.pipelines||[]) : [];
+    } catch(_){ hsPipelines = []; }
+  }
+  if(!hsPipelines.length){
+    selPip.innerHTML = '<option value="">HubSpot não configurado</option>';
+    document.getElementById('hsMassaBtnGo').disabled = true;
+  } else {
+    selPip.innerHTML = '<option value="">Escolha...</option>' +
+      hsPipelines.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.label)}</option>`).join('');
+  }
+  // Reset etapa e motivo
+  document.getElementById('hsMassaEta').innerHTML = '<option value="">Escolha uma pipeline primeiro</option>';
+  document.getElementById('hsMassaMot').innerHTML = '<option value="">Escolha uma etapa primeiro</option>';
+  // Motivos chat locais (tipo perda)
+  if(!MOTIVOS_CACHE.length) await carregarMotivos();
+  const selMotChat = document.getElementById('hsMassaMotChat');
+  const motivosPerda = (MOTIVOS_CACHE||[]).filter(m => (m.tipo||'perda') !== 'ganho');
+  selMotChat.innerHTML = '<option value="">— Sem motivo local —</option>' +
+    motivosPerda.map(m => `<option value="${escapeAttr(m.codigo)}">${escapeHtml(m.nome)}</option>`).join('');
+  document.getElementById('hsMassaBack').classList.add('on');
+}
+
+function fecharHSMassa(){
+  document.getElementById('hsMassaBack').classList.remove('on');
+}
+
+function hsMassaSetPipeline(){
+  const pipId = document.getElementById('hsMassaPip').value;
+  const selEta = document.getElementById('hsMassaEta');
+  const pip = (hsPipelines||[]).find(p => p.id === pipId);
+  if(!pip){
+    selEta.innerHTML = '<option value="">Escolha uma pipeline</option>';
+    return;
+  }
+  // Filtra apenas etapas de PERDA
+  const etapasPerda = (pip.stages||[]).filter(s => {
+    if(Number(s.probability) === 0) return true;
+    const lbl = (s.label||'').toLowerCase();
+    return lbl.includes('perd') || lbl.includes('lost') || lbl.includes('desist');
+  });
+  if(!etapasPerda.length){
+    selEta.innerHTML = '<option value="">(pipeline sem etapa de perda)</option>';
+  } else {
+    selEta.innerHTML = '<option value="">Escolha...</option>' +
+      etapasPerda.map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.label)}</option>`).join('');
+  }
+  // Reset motivo
+  document.getElementById('hsMassaMot').innerHTML = '<option value="">Escolha uma etapa primeiro</option>';
+}
+
+async function hsMassaSetEtapa(){
+  const stageId = document.getElementById('hsMassaEta').value;
+  const selMot = document.getElementById('hsMassaMot');
+  if(!stageId){
+    selMot.innerHTML = '<option value="">Escolha uma etapa</option>';
+    return;
+  }
+  await hsCarregarMotivos();
+  const mp = hsMotivosPerda || {};
+  const opcoes = (mp.opcoes || mp.motivos || []);
+  const propName = mp.propname || 'motivo_da_perda';
+  selMot.dataset.propname = propName;
+  if(!opcoes.length){
+    selMot.innerHTML = '<option value="">(sem motivos cadastrados)</option>';
+  } else {
+    selMot.innerHTML = '<option value="">Escolha...</option>' +
+      opcoes.map(o => `<option value="${escapeAttr(o.value||o)}">${escapeHtml(o.label||o.value||o)}</option>`).join('');
+  }
+}
+
+async function executarFecharMassaHS(){
+  if(!window.__DIST_SEL.size){ toast('Sem conversas', 'err'); return; }
+  const pipeline_id = document.getElementById('hsMassaPip').value;
+  const dealstage_id = document.getElementById('hsMassaEta').value;
+  const selMot = document.getElementById('hsMassaMot');
+  const motivo_valor = selMot.value;
+  const motivo_prop_name = selMot.dataset.propname || 'motivo_da_perda';
+  const motivo_chat = document.getElementById('hsMassaMotChat').value;
+  if(!pipeline_id){ toast('Escolha uma pipeline', 'err'); return; }
+  if(!dealstage_id){ toast('Escolha uma etapa de perda', 'err'); return; }
+  if(!motivo_valor){ toast('Escolha um motivo da perda', 'err'); return; }
+  const total = window.__DIST_SEL.size;
+  if(!confirm('Fechar ' + total + ' deals no HubSpot como perdidos + finalizar chats?\n\nEssa ação NÃO pode ser desfeita em massa.')) return;
+  const conversas = Array.from(window.__DIST_SEL).map(k => {
+    const [conta_id, telefone] = k.split(':');
+    return {conta_id, telefone};
+  });
+  const btn = document.getElementById('hsMassaBtnGo');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="loader" style="width:14px;height:14px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;display:inline-block;animation:sp-rot .7s linear infinite"></span> Processando ' + total + ' deals... (pode levar 1-2 min)';
+  const prog = document.getElementById('hsMassaProgress');
+  prog.style.display = 'block';
+  prog.innerHTML = 'Enviando lote pro HubSpot... aguarde.';
+  try {
+    const r = await safeFetchJson(BASE + '/chat-finalizar-massa-hubspot', {
+      method: 'POST',
+      headers: {'Content-Type':'text/plain;charset=UTF-8'},
+      body: JSON.stringify({ conversas, pipeline_id, dealstage_id, motivo_prop_name, motivo_valor, motivo_chat, quem: USUARIO })
+    });
+    if(!r || !r.ok){ toast('Erro: '+(r&&r.erro||'servidor'), 'err'); btn.disabled = false; btn.innerHTML = '<i class="bi bi-bullseye"></i> Fechar tudo'; return; }
+    prog.innerHTML = '<b>' + r.total + ' processadas</b> — ✅ ' + r.com_deal_atualizado + ' deals fechados | 📭 ' + r.sem_deal_atualizado + ' sem deal | ❌ ' + r.erros + ' erros';
+    // Registra eventos locais
+    (r.detalhes||[]).forEach(d => {
+      if(d.ok){
+        registrarEvento(d.conta_id, d.telefone, 'finalizacao', { motivo: motivo_chat, texto: d.sem_deal ? 'finalizada em massa (sem deal HubSpot)' : ('fechado no HubSpot: '+(d.dealname||d.deal_id)) });
+      }
+    });
+    toast(r.com_deal_atualizado + ' deals fechados + ' + r.sem_deal_atualizado + ' chats finalizados', '');
+    setTimeout(() => {
+      fecharHSMassa();
+      window.__DIST_SEL.clear();
+      window.__DIST_MODE = false;
+      document.getElementById('btnDistToggle').classList.remove('on');
+      document.getElementById('distBar').style.display = 'none';
+      carregarConversas();
+    }, 2500);
+  } catch(e){
+    toast('Erro: '+e.message, 'err');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-bullseye"></i> Fechar tudo';
+  }
 }
 
 function renderConversas(filtro){
