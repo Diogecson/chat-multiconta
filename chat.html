@@ -1299,7 +1299,7 @@ body,html{height:100%;margin:0;overflow:hidden;background:var(--bg);
           <input type="radio" name="dmModo" value="equipe" checked onchange="dmSetModo(this.value)">
           <div class="dm-radio-body">
             <div class="dm-radio-title"><i class="bi bi-people-fill"></i> Dividir entre a equipe</div>
-            <div class="dm-radio-sub" id="dmEquipeSub">Round-robin entre consultores ONLINE (pingaram nos últimos 3 min).</div>
+            <div class="dm-radio-sub" id="dmEquipeSub">Round-robin entre consultores NA FILA (toggle ativado no painel).</div>
           </div>
         </label>
         <label class="dm-radio">
@@ -2624,12 +2624,12 @@ function abrirDistModal(){
     atd.map(a => {
       const uid = (a.usuario||'').toLowerCase();
       const on = online.has(uid);
-      return `<option value="${escapeHtml(uid)}">${on?'🟢':'⚫'} ${escapeHtml(a.nome||a.usuario)}${on?' (online)':' (offline)'}</option>`;
+      return `<option value="${escapeHtml(uid)}">${on?'🟢':'⚫'} ${escapeHtml(a.nome||a.usuario)}${on?' (na fila)':' (fora)'}</option>`;
     }).join('');
   // Atualiza sub-texto do card "equipe" pra mostrar quantos online
   const onlineCount = atd.filter(a => online.has((a.usuario||'').toLowerCase())).length;
   const sub = document.getElementById('dmEquipeSub');
-  if(sub) sub.innerHTML = `Round-robin entre consultores <b>ONLINE</b> (pingaram nos últimos 3 min). Agora: <b style="color:#16a34a">${onlineCount} online</b> de ${atd.length} cadastrados.`;
+  if(sub) sub.innerHTML = `Round-robin entre consultores <b>NA FILA</b> (toggle ativado no painel). Agora: <b style="color:#16a34a">${onlineCount} disponíveis</b> de ${atd.length} cadastrados.`;
   // Reset modo
   document.querySelector('input[name="dmModo"][value="equipe"]').checked = true;
   dmSetModo('equipe');
@@ -4706,10 +4706,14 @@ window.onload=async ()=>{
   };
   pingOnline(); // ping imediato
   agendarComJitter(pingOnline, 30000);
-  // Polling de quem tá online (usado pela bolinha do modal de distribuição)
+  // "Online" = consultor com toggle NA FILA ativado no painel (ignora ping do chat aberto)
   const carregarOnline = async () => {
-    const r = await safeFetchJson(BASE + '/chat-atendentes-online');
-    window.__ONLINE_USERS = new Set((r && r.online) || []);
+    const atd = ATENDENTES_CACHE || [];
+    const disponiveis = atd
+      .filter(a => a && a.na_fila === true && (a.ativo === undefined || a.ativo === true))
+      .map(a => String(a.usuario || '').toLowerCase())
+      .filter(Boolean);
+    window.__ONLINE_USERS = new Set(disponiveis);
   };
   window.__ONLINE_USERS = new Set();
   carregarOnline();
