@@ -158,10 +158,23 @@ body{margin:0;background:var(--bg);font-family:'Inter',system-ui,sans-serif;colo
           <button type="button" class="btn btn-secondary" style="font-size:.75rem;padding:6px 10px" onclick="importarAuto('livres_sem_triagem')" title="Contatos sem consultor e sem triagem preenchida"><i class="bi bi-person-x"></i> Livres sem triagem</button>
           <div style="display:flex;align-items:center;gap:4px">
             <i class="bi bi-tag" style="color:#7b8aa0;font-size:.85rem"></i>
-            <select id="fImportEtiqueta" onchange="onSelectEtiquetaImport()" style="font-size:.75rem;padding:6px 10px;border:1px solid #dae4f2;border-radius:8px;background:#fbfcfe;font-family:inherit;cursor:pointer;max-width:180px">
+            <select id="fImportEtiqueta" style="font-size:.75rem;padding:6px 10px;border:1px solid #dae4f2;border-radius:8px;background:#fbfcfe;font-family:inherit;cursor:pointer;max-width:180px" title="Etiqueta principal (obrigatória)">
               <option value="">Por etiqueta...</option>
             </select>
           </div>
+          <div style="display:flex;align-items:center;gap:4px">
+            <i class="bi bi-plus-lg" style="color:#16a34a;font-size:.85rem"></i>
+            <select id="fImportEtiqueta2" style="font-size:.75rem;padding:6px 10px;border:1px solid #dae4f2;border-radius:8px;background:#f0fdf4;font-family:inherit;cursor:pointer;max-width:180px" title="Também tem esta etiqueta (AND)">
+              <option value="">+ E também tem...</option>
+            </select>
+          </div>
+          <div style="display:flex;align-items:center;gap:4px">
+            <i class="bi bi-slash-circle" style="color:#dc2626;font-size:.85rem"></i>
+            <select id="fImportEtiquetaNao" style="font-size:.75rem;padding:6px 10px;border:1px solid #dae4f2;border-radius:8px;background:#fef2f2;font-family:inherit;cursor:pointer;max-width:180px" title="NÃO tem esta etiqueta (excluir)">
+              <option value="">− NÃO tem...</option>
+            </select>
+          </div>
+          <button type="button" class="btn btn-primary" style="font-size:.75rem;padding:6px 12px" onclick="aplicarFiltroEtiquetas()" title="Aplica os 3 filtros de etiqueta"><i class="bi bi-funnel-fill"></i> Aplicar</button>
           <span id="fImportInfo" style="font-size:.72rem;color:#7b8aa0;align-self:center"></span>
         </div>
         <div style="display:flex;gap:10px;margin-bottom:8px;flex-wrap:wrap;align-items:center;font-size:.75rem;color:#5b6b83;padding:8px 10px;background:#fafbfc;border:1px dashed #dae4f2;border-radius:8px">
@@ -432,13 +445,15 @@ let __ULTIMA_ORIGEM_AUTO = ''; // guarda qual foi o ultimo botao clicado
 function reimportarSePreciso(){
   if(!__ULTIMA_ORIGEM_AUTO) return;
   clearTimeout(window.__reimportTimer);
-  window.__reimportTimer = setTimeout(() => importarAuto(__ULTIMA_ORIGEM_AUTO, true, window.__ULTIMA_ETIQ_EXTRA || ''), 400);
+  window.__reimportTimer = setTimeout(() => importarAuto(__ULTIMA_ORIGEM_AUTO, true, window.__ULTIMA_ETIQ_EXTRA || '', window.__ULTIMA_ETIQ_2 || '', window.__ULTIMA_ETIQ_NAO || ''), 400);
 }
 
-async function importarAuto(origem, silencioso, etiquetaExtra){
+async function importarAuto(origem, silencioso, etiquetaExtra, etiqueta2, etiquetaNao){
   __ULTIMA_ORIGEM_AUTO = origem;
   window.__ULTIMA_ETIQ_EXTRA = etiquetaExtra || '';
-  const btns = document.querySelectorAll('button[onclick^="importarAuto"]');
+  window.__ULTIMA_ETIQ_2 = etiqueta2 || '';
+  window.__ULTIMA_ETIQ_NAO = etiquetaNao || '';
+  const btns = document.querySelectorAll('button[onclick^="importarAuto"], button[onclick^="aplicarFiltroEtiquetas"]');
   btns.forEach(b => b.disabled = true);
   const info = qs('#fImportInfo');
   if(info) info.textContent = '⏳ Buscando contatos...';
@@ -451,6 +466,8 @@ async function importarAuto(origem, silencioso, etiquetaExtra){
     if(horasMin > 0) params.push('horas_min=' + horasMin);
     if(inclDisp) params.push('incluir_disparos=true');
     if(etiquetaExtra) params.push('etiqueta=' + encodeURIComponent(etiquetaExtra));
+    if(etiqueta2) params.push('etiqueta2=' + encodeURIComponent(etiqueta2));
+    if(etiquetaNao) params.push('etiqueta_nao=' + encodeURIComponent(etiquetaNao));
     const url = URL_BASE + '/webhook/chat-disparos-buscar-auto?' + params.join('&');
     const r = await fetch(url);
     const j = await r.json();
@@ -718,24 +735,27 @@ async function carregarEtiquetasDatalist(){
     const j = await r.json();
     ETIQ_EXISTENTES = ((j && j.etiquetas) || []).sort((a,b) => (b.total||0)-(a.total||0));
     renderDropdownEtiq('');
-    // Popula tb o select de importar por etiqueta
-    const sel = qs('#fImportEtiqueta');
-    if(sel){
-      const prev = sel.value;
-      sel.innerHTML = '<option value="">Por etiqueta...</option>' +
+    // Popula os 3 selects de filtro de etiqueta
+    const populaSel = (id, placeholder) => {
+      const s = qs(id);
+      if(!s) return;
+      const prev = s.value;
+      s.innerHTML = '<option value="">' + placeholder + '</option>' +
         ETIQ_EXISTENTES.map(e => `<option value="${escapeHtml(e.etiqueta)}">${escapeHtml(e.etiqueta)} (${e.total||0})</option>`).join('');
-      if(prev) sel.value = prev;
-    }
+      if(prev) s.value = prev;
+    };
+    populaSel('#fImportEtiqueta', 'Por etiqueta...');
+    populaSel('#fImportEtiqueta2', '+ E também tem...');
+    populaSel('#fImportEtiquetaNao', '− NÃO tem...');
   }catch(_){ /* silencioso */ }
 }
 
-async function onSelectEtiquetaImport(){
-  const sel = qs('#fImportEtiqueta');
-  const et = sel ? sel.value : '';
-  if(!et) return;
-  await importarAuto('por_etiqueta', false, et);
-  // Volta o select pro placeholder
-  if(sel) sel.value = '';
+async function aplicarFiltroEtiquetas(){
+  const et = (qs('#fImportEtiqueta')||{}).value || '';
+  const et2 = (qs('#fImportEtiqueta2')||{}).value || '';
+  const etNao = (qs('#fImportEtiquetaNao')||{}).value || '';
+  if(!et){ toast('Escolha a etiqueta principal', 'err'); return; }
+  await importarAuto('por_etiqueta', false, et, et2, etNao);
 }
 
 function renderDropdownEtiq(filtro){
