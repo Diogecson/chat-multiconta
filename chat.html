@@ -1020,6 +1020,7 @@ body,html{height:100%;margin:0;overflow:hidden;background:var(--bg);
         <button class="dist-btn-go" onclick="abrirDistEnviarModal()" style="background:#f59e0b;color:#fff"><i class="bi bi-send-fill"></i> Enviar msg</button>
         <button class="dist-btn-go" onclick="abrirFinalizarMassaModal()" style="background:#dc2626;color:#fff" data-admin><i class="bi bi-check2-circle"></i> Finalizar</button>
         <button class="dist-btn-go" onclick="abrirFecharMassaHS()" style="background:#ff7a59;color:#fff" data-admin title="Fecha deals no HubSpot como perdidos + finaliza chats"><i class="bi bi-bullseye"></i> Fechar HubSpot</button>
+        <button class="dist-btn-go" onclick="abrirEtiquetarMassa()" style="background:#7c3aed;color:#fff" title="Adiciona etiqueta em N conversas"><i class="bi bi-tag-fill"></i> Etiquetar</button>
       </div>
     </div>
     <div class="sb-filtros-wrap" id="sbFiltrosWrap">
@@ -1341,6 +1342,26 @@ body,html{height:100%;margin:0;overflow:hidden;background:var(--bg);
     </div>
     <div class="dm-foot">
       <button class="dm-btn-cancel" onclick="fecharFinalizarMassa()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL ETIQUETAR EM MASSA -->
+<div class="dm-back" id="etqMassaBack" onclick="if(event.target===this)fecharEtqMassa()">
+  <div class="dm-modal" style="max-width:480px">
+    <div class="dm-head" style="background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff">
+      <h3><i class="bi bi-tag-fill"></i> Etiquetar <span id="etqMassaCount">0</span> conversas</h3>
+      <button class="dm-close" onclick="fecharEtqMassa()" style="color:#fff"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <div class="dm-body">
+      <div style="margin-bottom:10px;color:#5b6b83;font-size:13px">Escolha uma etiqueta existente OU digite uma nova (Enter cria).</div>
+      <input type="text" id="etqMassaInput" oninput="etqMassaFiltra()" onkeydown="if(event.key==='Enter'){event.preventDefault();etqMassaExecutar()}" placeholder="Digite pra buscar ou criar..." autocomplete="off" style="width:100%;padding:10px 12px;border:2px solid #e5e7eb;border-radius:8px;font-size:14px;font-family:inherit;margin-bottom:10px">
+      <div id="etqMassaLista" style="max-height:280px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;background:#fafbfc"></div>
+      <div id="etqMassaProgress" style="display:none;margin-top:12px;padding:10px;background:#f3f4f6;border-radius:6px;font-size:13px"></div>
+    </div>
+    <div class="dm-foot">
+      <button class="dm-btn-cancel" onclick="fecharEtqMassa()">Cancelar</button>
+      <button class="dm-btn-go" id="etqMassaBtnGo" onclick="etqMassaExecutar()" style="background:linear-gradient(135deg,#7c3aed,#a855f7)"><i class="bi bi-tag-fill"></i> Aplicar</button>
     </div>
   </div>
 </div>
@@ -2971,6 +2992,104 @@ async function executarFinalizarMassa(motivo){
   document.getElementById('btnDistToggle').classList.remove('on');
   document.getElementById('distBar').style.display = 'none';
   await carregarConversas();
+}
+
+/* ===== ETIQUETAR EM MASSA ===== */
+let ETQ_MASSA_ESCOLHIDA = '';
+async function abrirEtiquetarMassa(){
+  if(!window.__DIST_SEL.size){ toast('Selecione pelo menos 1 conversa', 'err'); return; }
+  document.getElementById('etqMassaCount').textContent = window.__DIST_SEL.size;
+  const inp = document.getElementById('etqMassaInput');
+  inp.value = '';
+  ETQ_MASSA_ESCOLHIDA = '';
+  document.getElementById('etqMassaProgress').style.display = 'none';
+  document.getElementById('etqMassaBtnGo').disabled = false;
+  // Carrega etiquetas existentes
+  try {
+    const r = await api(BASE + '/chat-etiquetas-list');
+    window.__ETQ_LIST = (r && r.etiquetas) || [];
+  } catch(_){ window.__ETQ_LIST = []; }
+  etqMassaFiltra();
+  document.getElementById('etqMassaBack').classList.add('on');
+  setTimeout(() => inp.focus(), 100);
+}
+
+function fecharEtqMassa(){
+  document.getElementById('etqMassaBack').classList.remove('on');
+}
+
+function etqMassaFiltra(){
+  const q = (document.getElementById('etqMassaInput').value||'').toLowerCase().trim();
+  const list = window.__ETQ_LIST || [];
+  const box = document.getElementById('etqMassaLista');
+  const filt = list.filter(e => !q || String(e.etiqueta).toLowerCase().includes(q));
+  const jaExiste = list.some(e => String(e.etiqueta).toLowerCase() === q);
+  let html = '';
+  filt.forEach(e => {
+    const eEsc = escapeHtml(e.etiqueta);
+    const attr = escapeAttr(e.etiqueta);
+    html += `<div onclick="etqMassaEscolher('${attr}')" style="padding:9px 12px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #f0f0f0;font-size:13px" onmouseover="this.style.background='#f0f6ff'" onmouseout="this.style.background='transparent'">
+      <span><i class="bi bi-tag" style="color:#7c3aed"></i> ${eEsc}</span>
+      <span style="color:#7b8aa0;font-size:11px;background:#e5e7eb;padding:2px 8px;border-radius:12px">${e.total||0}</span>
+    </div>`;
+  });
+  if(q && !jaExiste){
+    html += `<div onclick="etqMassaEscolher('${escapeAttr(q)}',true)" style="padding:9px 12px;cursor:pointer;background:#f0fdf4;color:#16a34a;font-weight:600;border-bottom:1px solid #f0f0f0;font-size:13px" onmouseover="this.style.background='#dcfce7'" onmouseout="this.style.background='#f0fdf4'">
+      <i class="bi bi-plus-lg"></i> Criar nova: <b>${escapeHtml(document.getElementById('etqMassaInput').value)}</b>
+    </div>`;
+  }
+  if(!html){
+    html = '<div style="padding:16px;text-align:center;color:#7b8aa0;font-size:13px">Nenhuma etiqueta. Digite pra criar uma nova.</div>';
+  }
+  box.innerHTML = html;
+}
+
+function etqMassaEscolher(etiqueta, criando){
+  ETQ_MASSA_ESCOLHIDA = etiqueta;
+  document.getElementById('etqMassaInput').value = etiqueta;
+  etqMassaFiltra();
+}
+
+async function etqMassaExecutar(){
+  if(!window.__DIST_SEL.size){ toast('Sem conversas', 'err'); return; }
+  const inp = document.getElementById('etqMassaInput');
+  const etiqueta = (ETQ_MASSA_ESCOLHIDA || inp.value || '').trim();
+  if(!etiqueta){ toast('Escolha ou digite uma etiqueta', 'err'); return; }
+  if(etiqueta.length > 40){ toast('Etiqueta muito longa (máx 40)', 'err'); return; }
+  const total = window.__DIST_SEL.size;
+  if(!confirm('Aplicar etiqueta "' + etiqueta + '" em ' + total + ' conversas?')) return;
+  const conversas = Array.from(window.__DIST_SEL).map(k => {
+    const [conta_id, telefone] = k.split(':');
+    return {conta_id, telefone};
+  });
+  document.getElementById('etqMassaBtnGo').disabled = true;
+  const prog = document.getElementById('etqMassaProgress');
+  prog.style.display = 'block';
+  prog.innerHTML = 'Processando...';
+  let ok = 0, erro = 0;
+  const BATCH = 5;
+  for(let i = 0; i < conversas.length; i += BATCH){
+    const lote = conversas.slice(i, i + BATCH);
+    await Promise.all(lote.map(async c => {
+      try {
+        const r = await safeFetchJson(BASE + '/chat-conversa-etiqueta-add', {
+          method:'POST',
+          headers:{'Content-Type':'text/plain;charset=UTF-8'},
+          body: JSON.stringify({ conta_id: c.conta_id, telefone: c.telefone, etiqueta, origem:'manual', usuario: USUARIO })
+        });
+        if(r && r.ok !== false) ok++; else erro++;
+      } catch(_){ erro++; }
+    }));
+    prog.innerHTML = 'Processado <b>' + (ok+erro) + '/' + total + '</b> — ✅ ' + ok + ' | ❌ ' + erro;
+  }
+  toast(ok + ' etiquetas aplicadas' + (erro ? ' ('+erro+' erros)' : ''), erro ? 'warn' : '');
+  fecharEtqMassa();
+  window.__DIST_SEL.clear();
+  window.__DIST_MODE = false;
+  document.getElementById('btnDistToggle').classList.remove('on');
+  document.getElementById('distBar').style.display = 'none';
+  await carregarConversas();
+  popularFiltroEtiqueta();
 }
 
 /* ===== FECHAR EM MASSA NO HUBSPOT ===== */
