@@ -1021,6 +1021,7 @@ body,html{height:100%;margin:0;overflow:hidden;background:var(--bg);
         <button class="dist-btn-go" onclick="abrirFinalizarMassaModal()" style="background:#dc2626;color:#fff" data-admin><i class="bi bi-check2-circle"></i> Finalizar</button>
         <button class="dist-btn-go" onclick="abrirFecharMassaHS()" style="background:#ff7a59;color:#fff" data-admin title="Fecha deals no HubSpot como perdidos + finaliza chats"><i class="bi bi-bullseye"></i> Fechar HubSpot</button>
         <button class="dist-btn-go" onclick="abrirEtiquetarMassa()" style="background:#7c3aed;color:#fff" title="Adiciona etiqueta em N conversas"><i class="bi bi-tag-fill"></i> Etiquetar</button>
+        <button class="dist-btn-go" onclick="executarEncerrarTriagemMassa()" style="background:#0891b2;color:#fff" data-admin title="Encerra triagem IA das conversas selecionadas"><i class="bi bi-funnel"></i> Encerrar Triagem</button>
       </div>
     </div>
     <div class="sb-filtros-wrap" id="sbFiltrosWrap">
@@ -2992,6 +2993,42 @@ async function executarFinalizarMassa(motivo){
   window.__DIST_MODE = false;
   document.getElementById('btnDistToggle').classList.remove('on');
   document.getElementById('distBar').style.display = 'none';
+  await carregarConversas();
+}
+
+/* ===== ENCERRAR TRIAGEM EM MASSA ===== */
+async function executarEncerrarTriagemMassa(){
+  if(!window.__DIST_SEL || !window.__DIST_SEL.size){ toast('Selecione pelo menos 1 conversa', 'err'); return; }
+  const total = window.__DIST_SEL.size;
+  if(!confirm('Encerrar triagem IA em ' + total + ' conversas?\n\nAs conversas ficam liberadas pra atendimento humano.')) return;
+  const conversas = Array.from(window.__DIST_SEL).map(k => {
+    const [conta_id, telefone] = k.split(':');
+    return {conta_id, telefone};
+  });
+  toast('Processando ' + total + ' conversas...', '');
+  let ok = 0, erro = 0, semTri = 0;
+  const BATCH = 5;
+  for(let i = 0; i < conversas.length; i += BATCH){
+    const lote = conversas.slice(i, i + BATCH);
+    await Promise.all(lote.map(async c => {
+      try {
+        const r = await safeFetchJson(URL_TRI_DESAT, {
+          method:'POST',
+          headers:{'Content-Type':'text/plain;charset=UTF-8'},
+          body: JSON.stringify({ conta_id: c.conta_id, telefone: c.telefone })
+        });
+        if(r && r.ok){ ok++; }
+        else if(r && (r.erro||'').toLowerCase().includes('sem triagem')){ semTri++; }
+        else erro++;
+      } catch(_){ erro++; }
+    }));
+  }
+  toast(ok + ' triagens encerradas' + (semTri ? ' | ' + semTri + ' sem triagem ativa' : '') + (erro ? ' | ' + erro + ' erros' : ''), erro ? 'warn' : '');
+  window.__DIST_SEL.clear();
+  window.__DIST_MODE = false;
+  document.getElementById('btnDistToggle').classList.remove('on');
+  document.getElementById('distBar').style.display = 'none';
+  await carregarTriagensAtivas();
   await carregarConversas();
 }
 
