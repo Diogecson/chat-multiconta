@@ -1146,6 +1146,7 @@ body,html{height:100%;margin:0;overflow:hidden;background:var(--bg);
           </p>
         </div>
         <div class="pn-actions">
+          <button title="Etiquetar esta conversa" id="btnEtiquetar" onclick="event.stopPropagation();abrirEtiquetarUnico()" style="color:#7c3aed"><i class="bi bi-tag-fill"></i></button>
           <button title="Finalizar conversa" id="btnFinalizar" onclick="event.stopPropagation();finalizarConversa()" style="display:none"><i class="bi bi-check2-circle"></i></button>
           <button title="Reabrir conversa" id="btnReabrir" onclick="event.stopPropagation();reabrirConversa()" style="display:none;color:var(--ok)"><i class="bi bi-arrow-counterclockwise"></i></button>
           <button title="HubSpot — buscar/criar negócio" id="btnHSHeader" onclick="event.stopPropagation();abrirHubspot()" data-feat="hubspot"><i class="bi bi-bullseye"></i></button>
@@ -2992,6 +2993,26 @@ async function executarFinalizarMassa(motivo){
   document.getElementById('btnDistToggle').classList.remove('on');
   document.getElementById('distBar').style.display = 'none';
   await carregarConversas();
+}
+
+/* ===== ETIQUETAR CONVERSA ATIVA (botão do header) ===== */
+async function abrirEtiquetarUnico(){
+  if(!conversaAtiva){ toast('Abra uma conversa primeiro','err'); return; }
+  // Injeta a conversa ativa no set de seleção temporariamente e reusa o modal massa
+  const key = conversaAtiva.conta_id + ':' + conversaAtiva.telefone;
+  if(!window.__DIST_SEL) window.__DIST_SEL = new Set();
+  const eraSelecionada = window.__DIST_SEL.has(key);
+  if(!eraSelecionada) window.__DIST_SEL.add(key);
+  await abrirEtiquetarMassa();
+  // Após fechar o modal, restaura o estado da seleção se ele não estava lá
+  const back = document.getElementById('etqMassaBack');
+  const observer = new MutationObserver(() => {
+    if(!back.classList.contains('on')){
+      if(!eraSelecionada) window.__DIST_SEL.delete(key);
+      observer.disconnect();
+    }
+  });
+  observer.observe(back, { attributes:true, attributeFilter:['class'] });
 }
 
 /* ===== ETIQUETAR EM MASSA ===== */
