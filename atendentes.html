@@ -540,7 +540,7 @@ function fotoRemover(){
 
 async function salvar(){
   const dados = {
-    usuario: qs('#fUsuario').value.trim().toLowerCase(),
+    usuario: qs('#fUsuario').value.trim().toLowerCase().replace(/^@+/, ''),
     nome: qs('#fNome').value.trim(),
     senha: qs('#fSenha').value,
     role: qs('#fPapel').value,
