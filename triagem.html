@@ -185,6 +185,19 @@ body{margin:0;background:var(--bg);font-family:'Inter',system-ui,sans-serif;colo
       </label>
     </div>
 
+    <div class="toggle-row" style="margin-top:12px">
+      <div class="toggle-info">
+        <strong>🔍 Ativar quando cliente digitar palavra-chave</strong>
+        <span>Aciona a triagem se a mensagem do cliente contiver uma das palavras abaixo. Só funciona pra conversas SEM consultor humano.</span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="cfgAtivaKw">
+        <span class="slider"></span>
+      </label>
+    </div>
+    <input class="input" id="cfgPalavrasChave" type="text" placeholder="matrícula, bolsa, inscrição, quero estudar" style="margin-top:8px">
+    <div class="helper">Separe por vírgula. Não faz diferença maiúscula/minúscula. Ex: <code>matrícula, bolsa, inscrição</code> — se o cliente digitar "quero fazer minha MATRÍCULA", aciona.</div>
+
     <label class="lbl">Mensagem inicial (enviada antes do 1º passo)</label>
     <textarea class="textarea" id="cfgMsgInicial" placeholder="Ex: Olá! Vou fazer algumas perguntas rápidas antes de te encaminhar..."></textarea>
 
@@ -424,6 +437,8 @@ async function carregar(){
     const cfg = r.config || {};
     TRIAGEM_ATUAL = cfg.codigo || TRIAGEM_ATUAL || 'default';
     qs('#cfgAtivaAuto').checked = !!cfg.ativa_auto;
+    qs('#cfgAtivaKw').checked = !!cfg.ativa_por_palavra_chave;
+    qs('#cfgPalavrasChave').value = Array.isArray(cfg.palavras_chave) ? cfg.palavras_chave.join(', ') : (cfg.palavras_chave || '');
     qs('#cfgMsgInicial').value = cfg.mensagem_inicial || '';
     qs('#cfgMsgFinal').value = cfg.mensagem_final || '';
     qs('#cfgMaxTent').value = cfg.max_tentativas || 2;
@@ -482,7 +497,9 @@ async function salvarConfig(){
   const mensagem_final = qs('#cfgMsgFinal').value.trim();
   const max_tentativas = Math.max(1, Math.min(5, Number(qs('#cfgMaxTent').value)||2));
   try{
-    const r = await api(URL_CFG, {method:'POST', bodyObj:{codigo: TRIAGEM_ATUAL || 'default', ativa_auto, mensagem_inicial, mensagem_final, max_tentativas}});
+    const ativa_por_palavra_chave = qs('#cfgAtivaKw').checked;
+    const palavras_chave = qs('#cfgPalavrasChave').value.split(',').map(s => s.trim()).filter(Boolean);
+    const r = await api(URL_CFG, {method:'POST', bodyObj:{codigo: TRIAGEM_ATUAL || 'default', ativa_auto, ativa_por_palavra_chave, palavras_chave, mensagem_inicial, mensagem_final, max_tentativas}});
     if(r.ok){ toast('Configuração salva.',''); }
     else toast('Erro: '+(r.erro||'servidor'),'err');
   }catch(e){ toast('Erro: '+e.message,'err'); }
