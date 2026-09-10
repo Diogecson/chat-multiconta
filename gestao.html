@@ -39,6 +39,24 @@ body{margin:0;background:var(--bg);font-family:'Inter',system-ui,sans-serif;colo
 
 .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:18px}
 .kpi-card{background:#fff;border-radius:var(--radius);box-shadow:var(--shadow-sm);border:1px solid var(--line);padding:18px 20px;position:relative;overflow:hidden}
+.kpi-card.clickable{cursor:pointer;transition:transform .15s, box-shadow .15s}
+.kpi-card.clickable:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,.08)}
+.kpi-card.clickable::after{content:"\F135";font-family:"bootstrap-icons";position:absolute;top:10px;right:12px;font-size:14px;color:#9ca3af;opacity:.6}
+.detmodal-back{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center}
+.detmodal-back.on{display:flex}
+.detmodal{background:#fff;border-radius:12px;max-width:900px;width:95%;max-height:90vh;display:flex;flex-direction:column;overflow:hidden}
+.detmodal-head{padding:16px 20px;background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;display:flex;justify-content:space-between;align-items:center}
+.detmodal-head h3{margin:0;font-size:16px;font-weight:700}
+.detmodal-head button{background:transparent;border:0;color:#fff;font-size:20px;cursor:pointer}
+.detmodal-body{padding:16px 20px;overflow:auto;flex:1}
+.detmodal-foot{padding:12px 20px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;gap:8px;align-items:center;background:#f9fafb}
+.det-tbl{width:100%;border-collapse:collapse;font-size:13px}
+.det-tbl th{text-align:left;padding:8px 10px;background:#f3f4f6;font-weight:600;color:#374151;border-bottom:2px solid #e5e7eb;position:sticky;top:0}
+.det-tbl td{padding:8px 10px;border-bottom:1px solid #f3f4f6}
+.det-tbl tr:hover td{background:#f9fafb}
+.det-btn{padding:8px 14px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;border:0}
+.det-btn-csv{background:#16a34a;color:#fff}
+.det-btn-close{background:#e5e7eb;color:#374151}
 .kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--purple),#9060ff)}
 .kpi-card.blue::before{background:linear-gradient(90deg,var(--meta),#0e5fc7)}
 .kpi-card.green::before{background:linear-gradient(90deg,var(--ok),#15803d)}
@@ -147,7 +165,7 @@ body{margin:0;background:var(--bg);font-family:'Inter',system-ui,sans-serif;colo
 </div>
 
 <div class="kpi-grid">
-  <div class="kpi-card blue" title="Conversas atribuídas a consultor no período que ainda estão ABERTAS (não conta finalizadas — matrículas/sem interesse ficam no card Finalizadas).">
+  <div class="kpi-card blue clickable" onclick="abrirDetalhes('conversas_atendidas','Conversas atendidas')" title="Clique pra ver a lista">
     <div class="kpi-lbl"><i class="bi bi-chat-square-text"></i> Conversas atendidas</div>
     <div class="kpi-val" id="kpiConversas">-</div>
     <div class="kpi-sub" id="kpiConversasSub">no período</div>
@@ -172,7 +190,7 @@ body{margin:0;background:var(--bg);font-family:'Inter',system-ui,sans-serif;colo
     <div class="kpi-val" id="kpiTaxa">-</div>
     <div class="kpi-sub" id="kpiTaxaSub">- de - responderam</div>
   </div>
-  <div class="kpi-card green">
+  <div class="kpi-card green clickable" onclick="abrirDetalhes('matriculas','Matrículas')" title="Clique pra ver a lista">
     <div class="kpi-lbl"><i class="bi bi-mortarboard-fill"></i> Matrículas</div>
     <div class="kpi-val" id="kpiMat">-</div>
     <div class="kpi-sub" id="kpiMatSub">no período</div>
@@ -182,12 +200,12 @@ body{margin:0;background:var(--bg);font-family:'Inter',system-ui,sans-serif;colo
     <div class="kpi-val" id="kpiConv">-</div>
     <div class="kpi-sub" id="kpiConvSub">matrículas / conversas</div>
   </div>
-  <div class="kpi-card" style="border-top-color:#dc2626">
+  <div class="kpi-card clickable" style="border-top-color:#dc2626" onclick="abrirDetalhes('sem_resposta','Sem resposta do cliente')" title="Clique pra ver a lista">
     <div class="kpi-lbl"><i class="bi bi-chat-square-x-fill"></i> Sem resposta do cliente</div>
     <div class="kpi-val" id="kpiSemResp">-</div>
     <div class="kpi-sub" id="kpiSemRespSub">abordados que não responderam</div>
   </div>
-  <div class="kpi-card" style="border-top-color:#7c3aed">
+  <div class="kpi-card clickable" style="border-top-color:#7c3aed" onclick="abrirDetalhes('em_triagem','Em triagem agora')" title="Clique pra ver a lista">
     <div class="kpi-lbl"><i class="bi bi-robot"></i> Em triagem agora</div>
     <div class="kpi-val" id="kpiTriAtivas">-</div>
     <div class="kpi-sub" id="kpiTriAtivasSub">sessões ativas</div>
@@ -197,12 +215,12 @@ body{margin:0;background:var(--bg);font-family:'Inter',system-ui,sans-serif;colo
     <div class="kpi-val" id="kpiTriMsgs">-</div>
     <div class="kpi-sub" id="kpiTriMsgsSub">enviadas automaticamente</div>
   </div>
-  <div class="kpi-card" style="border-top-color:#f59e0b" title="Contatos que foram disparados e NUNCA responderam depois. Base: 1º disparo do contato no período.">
+  <div class="kpi-card clickable" style="border-top-color:#f59e0b" onclick="abrirDetalhes('disparos_sem_resposta','Disparos sem resposta')" title="Clique pra ver a lista">
     <div class="kpi-lbl"><i class="bi bi-megaphone-fill"></i> Disparos sem resposta</div>
     <div class="kpi-val" id="kpiDispMsgs">-</div>
     <div class="kpi-sub" id="kpiDispMsgsSub">nunca responderam</div>
   </div>
-  <div class="kpi-card" style="border-top-color:#16a34a">
+  <div class="kpi-card clickable" style="border-top-color:#16a34a" onclick="abrirDetalhes('finalizadas','Finalizadas')" title="Clique pra ver a lista">
     <div class="kpi-lbl"><i class="bi bi-check2-circle"></i> Finalizadas</div>
     <div class="kpi-val" id="kpiFinalizadas">-</div>
     <div class="kpi-sub" id="kpiFinalizadasSub">conversas encerradas</div>
@@ -827,6 +845,99 @@ async function analisarSelecionadas(){
 carregarAtendentes();
 carregarEtiquetas();
 carregar();
+
+// ===== Modal Detalhes dos Cards =====
+async function abrirDetalhes(tipo, titulo){
+  const back = document.getElementById('detModalBack');
+  document.getElementById('detModalTitle').innerHTML = '<i class="bi bi-list-ul"></i> ' + titulo;
+  document.getElementById('detModalBody').innerHTML = '<div style="text-align:center;padding:30px;color:#6b7280"><i class="bi bi-arrow-clockwise"></i> Carregando...</div>';
+  document.getElementById('detModalFoot').innerHTML = '';
+  back.classList.add('on');
+  try {
+    const params = ['tipo=' + encodeURIComponent(tipo)];
+    // Usa mesmos filtros do painel
+    const dias = periodoAtual || 7;
+    const hoje = new Date();
+    const de = new Date(hoje.getTime() - (dias-1)*24*3600*1000);
+    params.push('data_de=' + de.toISOString().slice(0,10));
+    params.push('data_ate=' + hoje.toISOString().slice(0,10));
+    const consultor = (qs('#fConsultor')||{}).value;
+    if(consultor) params.push('atendente=' + encodeURIComponent(consultor));
+    const etiqueta = (qs('#fEtiqueta')||{}).value;
+    if(etiqueta) params.push('etiqueta=' + encodeURIComponent(etiqueta));
+    const r = await fetch(URL_BASE + '/webhook/chat-gestao-detalhes?' + params.join('&')).then(r => r.json());
+    if(!r || !r.ok){
+      document.getElementById('detModalBody').innerHTML = '<div style="text-align:center;padding:30px;color:#dc2626">Erro: '+(r&&r.erro||'servidor')+'</div>';
+      return;
+    }
+    const rows = r.rows || [];
+    if(!rows.length){
+      document.getElementById('detModalBody').innerHTML = '<div style="text-align:center;padding:30px;color:#6b7280">Nenhuma conversa encontrada</div>';
+    } else {
+      let html = '<table class="det-tbl"><thead><tr><th>Nome</th><th>Telefone</th><th>Consultor</th><th>Etiquetas</th><th>Quando</th></tr></thead><tbody>';
+      for(const c of rows){
+        const quando = c.ordem_ts ? new Date(c.ordem_ts).toLocaleString('pt-BR') : '-';
+        html += '<tr>' +
+          '<td>'+_esc(c.nome||'')+'</td>' +
+          '<td>'+_esc(c.telefone||'')+'</td>' +
+          '<td>'+_esc(c.consultor||'-')+'</td>' +
+          '<td style="font-size:11px;color:#6b7280">'+_esc(c.etiquetas||'')+'</td>' +
+          '<td style="font-size:11px;white-space:nowrap">'+quando+'</td>' +
+          '</tr>';
+      }
+      html += '</tbody></table>';
+      document.getElementById('detModalBody').innerHTML = html;
+    }
+    document.getElementById('detModalFoot').innerHTML =
+      '<div style="color:#6b7280;font-size:13px"><b>'+rows.length+'</b> conversas</div>' +
+      '<div style="display:flex;gap:8px">' +
+      '<button class="det-btn det-btn-close" onclick="fecharDetalhes()">Fechar</button>' +
+      (rows.length ? '<button class="det-btn det-btn-csv" onclick="exportarDetalhesCSV(&quot;'+tipo+'&quot;)"><i class="bi bi-download"></i> Exportar CSV</button>' : '') +
+      '</div>';
+    window.__DET_ROWS = rows;
+    window.__DET_TITULO = titulo;
+  } catch(e){
+    document.getElementById('detModalBody').innerHTML = '<div style="text-align:center;padding:30px;color:#dc2626">Erro: '+e.message+'</div>';
+  }
+}
+function fecharDetalhes(){ document.getElementById('detModalBack').classList.remove('on'); }
+function _esc(s){ return String(s||'').replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c])); }
+function exportarDetalhesCSV(tipo){
+  const rows = window.__DET_ROWS || [];
+  if(!rows.length){ return; }
+  const header = ['Nome','Telefone','Consultor','Etiquetas','Quando'];
+  const csv = [header.join(';')];
+  for(const c of rows){
+    const quando = c.ordem_ts ? new Date(c.ordem_ts).toLocaleString('pt-BR') : '';
+    csv.push([
+      '"'+String(c.nome||'').replace(/"/g,'""')+'"',
+      '"'+String(c.telefone||'')+'"',
+      '"'+String(c.consultor||'')+'"',
+      '"'+String(c.etiquetas||'').replace(/"/g,'""')+'"',
+      '"'+quando+'"'
+    ].join(';'));
+  }
+  const bom = '﻿';
+  const blob = new Blob([bom + csv.join('\n')], {type:'text/csv;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'gestao_' + tipo + '_' + new Date().toISOString().slice(0,10) + '.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 100);
+}
+
 </script>
+
+<div class="detmodal-back" id="detModalBack" onclick="if(event.target===this)fecharDetalhes()">
+  <div class="detmodal">
+    <div class="detmodal-head">
+      <h3 id="detModalTitle">Detalhes</h3>
+      <button onclick="fecharDetalhes()"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <div class="detmodal-body" id="detModalBody"></div>
+    <div class="detmodal-foot" id="detModalFoot"></div>
+  </div>
+</div>
 </body>
 </html>
