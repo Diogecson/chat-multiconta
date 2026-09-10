@@ -2428,6 +2428,8 @@ async function carregarConversas(){
     conversas.sort((a,b)=>new Date(b.ultima_hora||0)-new Date(a.ultima_hora||0));
     // Salva cache pra próxima abertura ser instantânea
     convCacheSet(conversas);
+    // Re-merge finalizadas cacheadas (senão polling esvazia matrículas/finalizadas)
+    if(typeof mergeFinalizadasEmConversas === 'function') mergeFinalizadasEmConversas();
     carregarContadoresReais();
     renderConversas();
   }catch(e){
