@@ -2459,9 +2459,29 @@ let VISAO = 'minhas';
 let FILTRO_CONSULTOR = '';
 let CONVERSAS_FINALIZADAS_CACHE = [];
 let CONVERSAS_FINALIZADAS_LOADED_AT = 0;
+function mergeFinalizadasEmConversas(){
+  if(!CONVERSAS_FINALIZADAS_CACHE.length) return;
+  const existentes = new Set((conversas||[]).map(c => c.id));
+  for(const c of CONVERSAS_FINALIZADAS_CACHE){
+    if(!existentes.has(c.id)) conversas.push(c);
+    else {
+      const idx = conversas.findIndex(x => x.id === c.id);
+      if(idx >= 0){
+        conversas[idx].finalizada = true;
+        conversas[idx].finalizada_em = c.finalizada_em;
+        conversas[idx].motivo_fechamento = c.motivo_fechamento;
+        conversas[idx].motivo_tipo = c.motivo_tipo;
+        conversas[idx].motivo_nome = c.motivo_nome;
+        conversas[idx].motivo_cor = c.motivo_cor;
+        if(c.etiquetas && c.etiquetas.length) conversas[idx].etiquetas = c.etiquetas;
+      }
+    }
+  }
+}
 async function carregarConversasFinalizadas(){
   const AGORA = Date.now();
   if(CONVERSAS_FINALIZADAS_CACHE.length && (AGORA - CONVERSAS_FINALIZADAS_LOADED_AT) < 120000){
+    mergeFinalizadasEmConversas();
     return CONVERSAS_FINALIZADAS_CACHE;
   }
   try {
@@ -2473,22 +2493,7 @@ async function carregarConversasFinalizadas(){
     const r = await api(BASE + '/chat-conversas-finalizadas?' + params.join('&'));
     CONVERSAS_FINALIZADAS_CACHE = (r && r.conversas) || [];
     CONVERSAS_FINALIZADAS_LOADED_AT = AGORA;
-    const existentes = new Set((conversas||[]).map(c => c.id));
-    for(const c of CONVERSAS_FINALIZADAS_CACHE){
-      if(!existentes.has(c.id)) conversas.push(c);
-      else {
-        const idx = conversas.findIndex(x => x.id === c.id);
-        if(idx >= 0){
-          conversas[idx].finalizada = true;
-          conversas[idx].finalizada_em = c.finalizada_em;
-          conversas[idx].motivo_fechamento = c.motivo_fechamento;
-          conversas[idx].motivo_tipo = c.motivo_tipo;
-          conversas[idx].motivo_nome = c.motivo_nome;
-          conversas[idx].motivo_cor = c.motivo_cor;
-          if(c.etiquetas && c.etiquetas.length) conversas[idx].etiquetas = c.etiquetas;
-        }
-      }
-    }
+    mergeFinalizadasEmConversas();
   } catch(e){ console.warn('Erro carregar finalizadas:', e); }
   return CONVERSAS_FINALIZADAS_CACHE;
 }
