@@ -3292,16 +3292,35 @@ async function executarFecharMassaHS(){
   });
   const btn = document.getElementById('hsMassaBtnGo');
   btn.disabled = true;
-  btn.innerHTML = '<span class="loader" style="width:14px;height:14px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;display:inline-block;animation:sp-rot .7s linear infinite"></span> Processando ' + total + ' deals... (pode levar 1-2 min)';
   const prog = document.getElementById('hsMassaProgress');
   prog.style.display = 'block';
-  prog.innerHTML = 'Enviando lote pro HubSpot... aguarde.';
+  const SEG_POR_DEAL = 1.5;
+  const inicio = Date.now();
+  const totalEstimadoSeg = Math.ceil(total * SEG_POR_DEAL);
+  function fmtTempo(s){
+    s = Math.max(0, Math.round(s));
+    const m = Math.floor(s/60);
+    const rs = s%60;
+    return m>0 ? (m+'m '+rs.toString().padStart(2,'0')+'s') : (rs+'s');
+  }
+  function atualizarProgresso(){
+    const decorridoSeg = (Date.now()-inicio)/1000;
+    const processadoEst = Math.min(total, Math.floor(decorridoSeg / SEG_POR_DEAL));
+    const restanteSeg = Math.max(0, totalEstimadoSeg - decorridoSeg);
+    const pct = Math.min(99, Math.round((decorridoSeg/totalEstimadoSeg)*100));
+    btn.innerHTML = '<span class="loader" style="width:14px;height:14px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;display:inline-block;animation:sp-rot .7s linear infinite"></span> ' + processadoEst + '/' + total + ' · ' + fmtTempo(restanteSeg) + ' restantes';
+    prog.innerHTML = '<div style="background:#f3f4f6;border-radius:6px;height:8px;overflow:hidden;margin-bottom:6px"><div style="background:linear-gradient(90deg,#ff7a59,#f97316);height:100%;width:'+pct+'%;transition:width .3s"></div></div>' +
+      '<div style="font-size:12px;color:#6b7280">~' + processadoEst + ' de ' + total + ' processadas · ' + pct + '% · <b>~' + fmtTempo(restanteSeg) + '</b> restantes</div>';
+  }
+  atualizarProgresso();
+  const timerId = setInterval(atualizarProgresso, 1000);
   try {
     const r = await safeFetchJson(BASE + '/chat-finalizar-massa-hubspot', {
       method: 'POST',
       headers: {'Content-Type':'text/plain;charset=UTF-8'},
       body: JSON.stringify({ conversas, pipeline_id, dealstage_id, motivo_prop_name, motivo_valor, motivo_chat, quem: USUARIO })
     });
+    clearInterval(timerId);
     if(!r || !r.ok){ toast('Erro: '+(r&&r.erro||'servidor'), 'err'); btn.disabled = false; btn.innerHTML = '<i class="bi bi-bullseye"></i> Fechar tudo'; return; }
     prog.innerHTML = '<b>' + r.total + ' processadas</b> — ✅ ' + r.com_deal_atualizado + ' deals fechados | 📭 ' + r.sem_deal_atualizado + ' sem deal | ❌ ' + r.erros + ' erros';
     // Registra eventos locais
@@ -3320,6 +3339,7 @@ async function executarFecharMassaHS(){
       carregarConversas();
     }, 2500);
   } catch(e){
+    clearInterval(timerId);
     toast('Erro: '+e.message, 'err');
     btn.disabled = false;
     btn.innerHTML = '<i class="bi bi-bullseye"></i> Fechar tudo';
