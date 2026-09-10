@@ -1376,16 +1376,21 @@ body,html{height:100%;margin:0;overflow:hidden;background:var(--bg);
       <button class="dm-close" onclick="fecharHSMassa()" style="color:#fff"><i class="bi bi-x-lg"></i></button>
     </div>
     <div class="dm-body">
-      <div style="margin-bottom:10px;color:#dc2626;font-size:13px"><i class="bi bi-exclamation-triangle-fill"></i> Fecha o deal mais recente de cada conversa (etapa de perda + motivo) e finaliza o chat.</div>
+      <div id="hsMassaAviso" style="margin-bottom:10px;color:#dc2626;font-size:13px"><i class="bi bi-exclamation-triangle-fill"></i> Fecha o deal mais recente de cada conversa e finaliza o chat.</div>
+      <label style="display:block;margin-bottom:6px;font-weight:600;font-size:13px">Tipo</label>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <button type="button" id="hsTipoPerda" onclick="hsMassaSetTipo('perda')" style="flex:1;padding:10px;border-radius:8px;border:2px solid #dc2626;background:#fee2e2;color:#dc2626;font-weight:700;cursor:pointer">🔴 Perda</button>
+        <button type="button" id="hsTipoGanho" onclick="hsMassaSetTipo('ganho')" style="flex:1;padding:10px;border-radius:8px;border:2px solid #e5e7eb;background:#fff;color:#16a34a;font-weight:600;cursor:pointer">🟢 Matriculado</button>
+      </div>
       <label style="display:block;margin-bottom:6px;font-weight:600;font-size:13px">Pipeline</label>
       <select class="dm-select" id="hsMassaPip" onchange="hsMassaSetPipeline()" style="margin-bottom:12px">
         <option value="">Carregando pipelines...</option>
       </select>
-      <label style="display:block;margin-bottom:6px;font-weight:600;font-size:13px">Etapa (perda)</label>
+      <label id="hsMassaEtaLabel" style="display:block;margin-bottom:6px;font-weight:600;font-size:13px">Etapa (perda)</label>
       <select class="dm-select" id="hsMassaEta" onchange="hsMassaSetEtapa()" style="margin-bottom:12px">
         <option value="">Escolha uma pipeline primeiro</option>
       </select>
-      <label style="display:block;margin-bottom:6px;font-weight:600;font-size:13px">Motivo da perda (HubSpot)</label>
+      <label id="hsMassaMotLabel" style="display:block;margin-bottom:6px;font-weight:600;font-size:13px">Motivo da perda (HubSpot)</label>
       <select class="dm-select" id="hsMassaMot" style="margin-bottom:12px">
         <option value="">Escolha uma etapa primeiro</option>
       </select>
@@ -3226,14 +3231,41 @@ async function abrirFecharMassaHS(){
   // Motivos chat locais (tipo perda)
   if(!MOTIVOS_CACHE.length) await carregarMotivos();
   const selMotChat = document.getElementById('hsMassaMotChat');
-  const motivosPerda = (MOTIVOS_CACHE||[]).filter(m => (m.tipo||'perda') !== 'ganho');
+  HS_MASSA_TIPO = 'perda';
+  const motivosPerda = (MOTIVOS_CACHE||[]).filter(m => (m.tipo||'perda') === 'perda');
   selMotChat.innerHTML = '<option value="">— Sem motivo local —</option>' +
     motivosPerda.map(m => `<option value="${escapeAttr(m.codigo)}">${escapeHtml(m.nome)}</option>`).join('');
   document.getElementById('hsMassaBack').classList.add('on');
+  setTimeout(() => { if(typeof hsMassaSetTipo === 'function') hsMassaSetTipo('perda'); }, 100);
 }
 
 function fecharHSMassa(){
   document.getElementById('hsMassaBack').classList.remove('on');
+}
+
+let HS_MASSA_TIPO = 'perda';
+function hsMassaSetTipo(tipo){
+  HS_MASSA_TIPO = tipo === 'ganho' ? 'ganho' : 'perda';
+  const btnP = document.getElementById('hsTipoPerda');
+  const btnG = document.getElementById('hsTipoGanho');
+  if(HS_MASSA_TIPO === 'perda'){
+    btnP.style.background = '#fee2e2'; btnP.style.border = '2px solid #dc2626'; btnP.style.fontWeight = '700';
+    btnG.style.background = '#fff'; btnG.style.border = '2px solid #e5e7eb'; btnG.style.fontWeight = '600';
+    document.getElementById('hsMassaEtaLabel').textContent = 'Etapa (perda)';
+    document.getElementById('hsMassaMotLabel').textContent = 'Motivo da perda (HubSpot)';
+    document.getElementById('hsMassaAviso').innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i> Fecha o deal mais recente como PERDA + finaliza o chat.';
+  } else {
+    btnG.style.background = '#dcfce7'; btnG.style.border = '2px solid #16a34a'; btnG.style.fontWeight = '700';
+    btnP.style.background = '#fff'; btnP.style.border = '2px solid #e5e7eb'; btnP.style.fontWeight = '600';
+    document.getElementById('hsMassaEtaLabel').textContent = 'Etapa (ganho)';
+    document.getElementById('hsMassaMotLabel').textContent = 'Motivo do ganho (opcional)';
+    document.getElementById('hsMassaAviso').innerHTML = '<i class="bi bi-check-circle-fill" style="color:#16a34a"></i> Marca o deal como MATRICULADO/GANHO + finaliza o chat.';
+  }
+  hsMassaSetPipeline();
+  const selMotChat = document.getElementById('hsMassaMotChat');
+  const motivosFiltrados = (MOTIVOS_CACHE||[]).filter(m => (m.tipo||'perda') === HS_MASSA_TIPO);
+  selMotChat.innerHTML = '<option value="">— Sem motivo local —</option>' +
+    motivosFiltrados.map(m => `<option value="${escapeAttr(m.codigo)}">${escapeHtml(m.nome)}</option>`).join('');
 }
 
 function hsMassaSetPipeline(){
@@ -3244,19 +3276,26 @@ function hsMassaSetPipeline(){
     selEta.innerHTML = '<option value="">Escolha uma pipeline</option>';
     return;
   }
-  // Filtra apenas etapas de PERDA
-  const etapasPerda = (pip.stages||[]).filter(s => {
-    if(Number(s.probability) === 0) return true;
-    const lbl = (s.label||'').toLowerCase();
-    return lbl.includes('perd') || lbl.includes('lost') || lbl.includes('desist');
-  });
-  if(!etapasPerda.length){
-    selEta.innerHTML = '<option value="">(pipeline sem etapa de perda)</option>';
+  let etapas;
+  if(HS_MASSA_TIPO === 'ganho'){
+    etapas = (pip.stages||[]).filter(s => {
+      if(Number(s.probability) === 1) return true;
+      const lbl = (s.label||'').toLowerCase();
+      return lbl.includes('ganho') || lbl.includes('matricul') || lbl.includes('won') || lbl.includes('fechad');
+    });
+  } else {
+    etapas = (pip.stages||[]).filter(s => {
+      if(Number(s.probability) === 0) return true;
+      const lbl = (s.label||'').toLowerCase();
+      return lbl.includes('perd') || lbl.includes('lost') || lbl.includes('desist');
+    });
+  }
+  if(!etapas.length){
+    selEta.innerHTML = '<option value="">(pipeline sem etapa de ' + HS_MASSA_TIPO + ')</option>';
   } else {
     selEta.innerHTML = '<option value="">Escolha...</option>' +
-      etapasPerda.map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.label)}</option>`).join('');
+      etapas.map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.label)}</option>`).join('');
   }
-  // Reset motivo
   document.getElementById('hsMassaMot').innerHTML = '<option value="">Escolha uma etapa primeiro</option>';
 }
 
