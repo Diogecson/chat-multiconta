@@ -2435,6 +2435,8 @@ async function carregarConversas(){
     convCacheSet(conversas);
     // Re-merge finalizadas cacheadas (senão polling esvazia matrículas/finalizadas)
     if(typeof mergeFinalizadasEmConversas === 'function') mergeFinalizadasEmConversas();
+    // Re-merge busca profunda ativa (senão polling esvazia resultados)
+    if(typeof mergeBuscaProfundaEmConversas === 'function') mergeBuscaProfundaEmConversas();
     carregarContadoresReais();
     renderConversas();
   }catch(e){
@@ -2515,6 +2517,18 @@ async function setVisao(v){
 }
 
 let BUSCA_PROFUNDA_ATIVA = false;
+let BUSCA_PROFUNDA_CONVERSAS = [];
+function mergeBuscaProfundaEmConversas(){
+  if(!BUSCA_PROFUNDA_ATIVA || !BUSCA_PROFUNDA_CONVERSAS.length) return;
+  const existentes = new Set((conversas||[]).map(c => c.id));
+  for(const c of BUSCA_PROFUNDA_CONVERSAS){
+    if(!existentes.has(c.id)) conversas.push(c);
+    else {
+      const idx = conversas.findIndex(x => x.id === c.id);
+      if(idx >= 0 && c.trecho_match) conversas[idx].trecho_match = c.trecho_match;
+    }
+  }
+}
 async function buscarMensagensProfundas(){
   const termo = (qs('#busca').value||'').trim();
   if(termo.length < 3){ toast('Digite pelo menos 3 caracteres', 'err'); return; }
@@ -2529,17 +2543,10 @@ async function buscarMensagensProfundas(){
     if(contaAtiva) params.push('conta_id=' + encodeURIComponent(contaAtiva.id));
     const r = await api(BASE + '/chat-buscar-mensagens?' + params.join('&'));
     if(!r || !r.ok){ toast('Erro na busca: '+(r&&r.erro||''), 'err'); return; }
-    const existentes = new Set((conversas||[]).map(c => c.id));
-    let novas = 0;
-    for(const c of (r.conversas||[])){
-      if(!existentes.has(c.id)){ conversas.push(c); novas++; }
-      else {
-        const idx = conversas.findIndex(x => x.id === c.id);
-        if(idx >= 0 && c.trecho_match) conversas[idx].trecho_match = c.trecho_match;
-      }
-    }
+    BUSCA_PROFUNDA_CONVERSAS = r.conversas || [];
     BUSCA_PROFUNDA_ATIVA = true;
-    window.__ULTIMA_BUSCA_PROFUNDA = { termo, ids: new Set((r.conversas||[]).map(c => c.id)) };
+    window.__ULTIMA_BUSCA_PROFUNDA = { termo, ids: new Set(BUSCA_PROFUNDA_CONVERSAS.map(c => c.id)) };
+    mergeBuscaProfundaEmConversas();
     toast(r.total + ' conversas encontradas com "' + termo + '"', '');
     renderConversas(termo.toLowerCase());
   } catch(e){
@@ -2553,6 +2560,7 @@ if(typeof _origFiltrar === 'function'){
     const v = (qs('#busca').value||'').trim();
     if(!v && BUSCA_PROFUNDA_ATIVA){
       BUSCA_PROFUNDA_ATIVA = false;
+      BUSCA_PROFUNDA_CONVERSAS = [];
       window.__ULTIMA_BUSCA_PROFUNDA = null;
     }
     return _origFiltrar.apply(this, arguments);
