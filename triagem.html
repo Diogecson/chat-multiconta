@@ -141,6 +141,32 @@ body{margin:0;background:var(--bg);font-family:'Inter',system-ui,sans-serif;colo
 
 <div class="wrap">
 
+<!-- Card 0: Seletor de Triagens -->
+<div class="card" style="margin-bottom:16px">
+  <div class="card-head">
+    <h3 class="card-title"><i class="bi bi-collection"></i> Triagem</h3>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="novaTriagem()" style="background:#16a34a;border:0"><i class="bi bi-plus-lg"></i> Nova</button>
+      <button class="btn" onclick="duplicarTriagem()" style="background:#f3f4f6"><i class="bi bi-files"></i> Duplicar</button>
+      <button class="btn" onclick="renomearTriagem()" style="background:#f3f4f6"><i class="bi bi-pencil"></i> Renomear</button>
+      <button class="btn" onclick="ativarTriagem()" style="background:#7c3aed;color:#fff;border:0"><i class="bi bi-check-circle"></i> Ativar</button>
+      <button class="btn" onclick="excluirTriagem()" style="background:#fee2e2;color:#dc2626"><i class="bi bi-trash"></i> Excluir</button>
+    </div>
+  </div>
+  <div class="card-body">
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <label style="font-weight:600;font-size:13px">Editando:</label>
+      <select id="triagemSel" onchange="trocarTriagem()" style="flex:1;min-width:250px;padding:8px 12px;border:1px solid #e5e7eb;border-radius:6px;font-size:14px">
+        <option value="">Carregando...</option>
+      </select>
+      <span id="triagemAtivaBadge" style="display:none;padding:4px 10px;background:#dcfce7;color:#16a34a;border-radius:12px;font-size:12px;font-weight:700">🟢 ATIVA</span>
+    </div>
+    <div style="margin-top:8px;font-size:12px;color:#6b7280">
+      💡 Só <b>uma triagem</b> pode estar ativa por vez. Ao ativar uma, as outras ficam paradas (mas salvas).
+    </div>
+  </div>
+</div>
+
 <!-- Card 1: Config global -->
 <div class="card">
   <div class="card-head">
@@ -242,6 +268,15 @@ const URL_CFG     = URL_BASE + '/webhook/chat-triagem-config-save';
 const URL_PSAVE   = URL_BASE + '/webhook/chat-triagem-passo-save';
 const URL_PDEL    = URL_BASE + '/webhook/chat-triagem-passo-delete';
 const URL_MOTIVOS = URL_BASE + '/webhook/chat-motivos-list';
+const URL_TRI_LIST   = URL_BASE + '/webhook/chat-triagem-config-list';
+const URL_TRI_NOVA   = URL_BASE + '/webhook/chat-triagem-config-nova';
+const URL_TRI_REN    = URL_BASE + '/webhook/chat-triagem-config-rename';
+const URL_TRI_DUP    = URL_BASE + '/webhook/chat-triagem-config-duplicate';
+const URL_TRI_ACT    = URL_BASE + '/webhook/chat-triagem-config-set-active';
+const URL_TRI_DEL    = URL_BASE + '/webhook/chat-triagem-config-delete';
+
+let TRIAGEM_ATUAL = '';   // codigo da triagem sendo editada
+let TRIAGENS = [];        // lista de todas triagens
 
 let MOTIVOS_CACHE = [];
 async function carregarMotivosTriagem(){
@@ -286,12 +321,108 @@ async function api(url, opt){
   }
 }
 
+// ======== MULTI TRIAGENS ========
+async function carregarListaTriagens(){
+  try {
+    const r = await api(URL_TRI_LIST);
+    if(!r.ok){ toast('Erro lista triagens: '+(r.erro||''),'err'); return; }
+    TRIAGENS = r.triagens || [];
+    const sel = qs('#triagemSel');
+    sel.innerHTML = TRIAGENS.map(t => {
+      const label = t.nome + (t.ativa ? ' 🟢' : '') + ' (' + (t.total_passos||0) + ' passos)';
+      return '<option value="'+escapeHtml(t.codigo)+'">'+escapeHtml(label)+'</option>';
+    }).join('');
+    // Seleciona a ativa por padrão (ou a atual se já tinha)
+    const alvo = TRIAGEM_ATUAL || (TRIAGENS.find(t => t.ativa) || TRIAGENS[0] || {}).codigo || '';
+    if(alvo){ sel.value = alvo; TRIAGEM_ATUAL = alvo; }
+    const tri = TRIAGENS.find(t => t.codigo === TRIAGEM_ATUAL);
+    qs('#triagemAtivaBadge').style.display = (tri && tri.ativa) ? 'inline-block' : 'none';
+  } catch(e){ toast('Erro: '+e.message,'err'); }
+}
+
+async function trocarTriagem(){
+  TRIAGEM_ATUAL = qs('#triagemSel').value;
+  await carregar();
+  const tri = TRIAGENS.find(t => t.codigo === TRIAGEM_ATUAL);
+  qs('#triagemAtivaBadge').style.display = (tri && tri.ativa) ? 'inline-block' : 'none';
+}
+
+async function novaTriagem(){
+  const nome = prompt('Nome da nova triagem:', 'Nova triagem');
+  if(!nome) return;
+  try {
+    const r = await api(URL_TRI_NOVA, {method:'POST', bodyObj:{nome}});
+    if(!r.ok){ toast('Erro: '+(r.erro||''),'err'); return; }
+    TRIAGEM_ATUAL = r.codigo;
+    await carregarListaTriagens();
+    await carregar();
+    toast('Triagem criada: '+r.nome,'');
+  } catch(e){ toast('Erro: '+e.message,'err'); }
+}
+
+async function duplicarTriagem(){
+  if(!TRIAGEM_ATUAL){ toast('Selecione uma triagem primeiro','err'); return; }
+  const nome = prompt('Nome da nova (copia):', '');
+  if(nome === null) return; // cancelou
+  try {
+    const r = await api(URL_TRI_DUP, {method:'POST', bodyObj:{codigo: TRIAGEM_ATUAL, nome_novo: nome}});
+    if(!r.ok){ toast('Erro: '+(r.erro||''),'err'); return; }
+    TRIAGEM_ATUAL = r.codigo;
+    await carregarListaTriagens();
+    await carregar();
+    toast('Duplicada! '+r.passos_copiados+' passos copiados','');
+  } catch(e){ toast('Erro: '+e.message,'err'); }
+}
+
+async function renomearTriagem(){
+  if(!TRIAGEM_ATUAL){ toast('Selecione uma triagem primeiro','err'); return; }
+  const atual = (TRIAGENS.find(t => t.codigo === TRIAGEM_ATUAL) || {}).nome || '';
+  const novo = prompt('Novo nome:', atual);
+  if(!novo || novo === atual) return;
+  try {
+    const r = await api(URL_TRI_REN, {method:'POST', bodyObj:{codigo: TRIAGEM_ATUAL, nome: novo}});
+    if(!r.ok){ toast('Erro: '+(r.erro||''),'err'); return; }
+    await carregarListaTriagens();
+    toast('Renomeada','');
+  } catch(e){ toast('Erro: '+e.message,'err'); }
+}
+
+async function ativarTriagem(){
+  if(!TRIAGEM_ATUAL){ toast('Selecione uma triagem primeiro','err'); return; }
+  const nome = (TRIAGENS.find(t => t.codigo === TRIAGEM_ATUAL) || {}).nome || '';
+  if(!confirm('Ativar "'+nome+'"? Isso desativa a triagem atual.')) return;
+  try {
+    const r = await api(URL_TRI_ACT, {method:'POST', bodyObj:{codigo: TRIAGEM_ATUAL}});
+    if(!r.ok){ toast('Erro: '+(r.erro||''),'err'); return; }
+    await carregarListaTriagens();
+    toast('Ativada!','');
+  } catch(e){ toast('Erro: '+e.message,'err'); }
+}
+
+async function excluirTriagem(){
+  if(!TRIAGEM_ATUAL){ toast('Selecione uma triagem primeiro','err'); return; }
+  if(TRIAGEM_ATUAL === 'default'){ toast('Triagem padrão não pode ser excluída','err'); return; }
+  const nome = (TRIAGENS.find(t => t.codigo === TRIAGEM_ATUAL) || {}).nome || '';
+  if(!confirm('EXCLUIR "'+nome+'"? Todos os passos serão perdidos. Essa ação NÃO pode ser desfeita.')) return;
+  try {
+    const r = await api(URL_TRI_DEL, {method:'POST', bodyObj:{codigo: TRIAGEM_ATUAL}});
+    if(!r.ok){ toast('Erro: '+(r.erro||''),'err'); return; }
+    TRIAGEM_ATUAL = '';
+    await carregarListaTriagens();
+    await carregar();
+    toast('Excluída','');
+  } catch(e){ toast('Erro: '+e.message,'err'); }
+}
+
 // ======== CARREGAR ========
 async function carregar(){
   try{
-    const r = await api(URL_GET);
+    const sep = URL_GET.includes('?')?'&':'?';
+    const url = URL_GET + (TRIAGEM_ATUAL ? (sep + 'codigo=' + encodeURIComponent(TRIAGEM_ATUAL)) : '');
+    const r = await api(url);
     if(!r.ok){ toast('Erro ao carregar: '+(r.erro||'servidor'),'err'); return; }
     const cfg = r.config || {};
+    TRIAGEM_ATUAL = cfg.codigo || TRIAGEM_ATUAL || 'default';
     qs('#cfgAtivaAuto').checked = !!cfg.ativa_auto;
     qs('#cfgMsgInicial').value = cfg.mensagem_inicial || '';
     qs('#cfgMsgFinal').value = cfg.mensagem_final || '';
@@ -351,7 +482,7 @@ async function salvarConfig(){
   const mensagem_final = qs('#cfgMsgFinal').value.trim();
   const max_tentativas = Math.max(1, Math.min(5, Number(qs('#cfgMaxTent').value)||2));
   try{
-    const r = await api(URL_CFG, {method:'POST', bodyObj:{ativa_auto, mensagem_inicial, mensagem_final, max_tentativas}});
+    const r = await api(URL_CFG, {method:'POST', bodyObj:{codigo: TRIAGEM_ATUAL || 'default', ativa_auto, mensagem_inicial, mensagem_final, max_tentativas}});
     if(r.ok){ toast('Configuração salva.',''); }
     else toast('Erro: '+(r.erro||'servidor'),'err');
   }catch(e){ toast('Erro: '+e.message,'err'); }
@@ -496,7 +627,7 @@ async function salvarPasso(){
   }
 
   try{
-    const r = await api(URL_PSAVE, {method:'POST', bodyObj:{codigo, ordem, campo, mensagem, tipo_resposta, opcoes, fallback_codigo}});
+    const r = await api(URL_PSAVE, {method:'POST', bodyObj:{codigo, triagem_codigo: TRIAGEM_ATUAL || 'default', ordem, campo, mensagem, tipo_resposta, opcoes, fallback_codigo}});
     if(r.ok){ toast('Passo salvo.',''); fecharPasso(); carregar(); }
     else toast('Erro: '+(r.erro||'servidor'),'err');
   }catch(e){ toast('Erro: '+e.message,'err'); }
@@ -512,7 +643,7 @@ async function deletarPasso(codigo){
 }
 
 // INIT
-carregarMotivosTriagem().then(carregar);
+carregarMotivosTriagem().then(carregarListaTriagens).then(carregar);
 </script>
 
 </body>
