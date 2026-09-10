@@ -1116,7 +1116,7 @@ body,html{height:100%;margin:0;overflow:hidden;background:var(--bg);
     <div class="sb-search">
       <div class="sb-search-wrap">
         <i class="bi bi-search"></i>
-        <input id="busca" type="text" placeholder="Buscar conversa..." oninput="filtrarConversas()">
+        <input id="busca" type="text" placeholder="Buscar conversa... (Enter = busca profunda no texto)" oninput="filtrarConversas()" onkeydown="if(event.key==='Enter'){event.preventDefault();buscarMensagensProfundas();}">
       </div>
     </div>
     </div><!-- /sb-filtros-wrap -->
@@ -2513,6 +2513,51 @@ async function setVisao(v){
   }
   renderConversas(qs('#busca').value.toLowerCase().trim());
 }
+
+let BUSCA_PROFUNDA_ATIVA = false;
+async function buscarMensagensProfundas(){
+  const termo = (qs('#busca').value||'').trim();
+  if(termo.length < 3){ toast('Digite pelo menos 3 caracteres', 'err'); return; }
+  const list = qs('#convList');
+  list.innerHTML = '<div style="padding:20px;text-align:center;color:#6b7280"><i class="bi bi-search"></i> Buscando "<b>'+escapeHtml(termo)+'</b>" em todas as mensagens...</div>';
+  try {
+    const params = [
+      'q=' + encodeURIComponent(termo),
+      'actor=' + encodeURIComponent(USUARIO||''),
+      'role=' + encodeURIComponent(USUARIO_PAPEL||'USER')
+    ];
+    if(contaAtiva) params.push('conta_id=' + encodeURIComponent(contaAtiva.id));
+    const r = await api(BASE + '/chat-buscar-mensagens?' + params.join('&'));
+    if(!r || !r.ok){ toast('Erro na busca: '+(r&&r.erro||''), 'err'); return; }
+    const existentes = new Set((conversas||[]).map(c => c.id));
+    let novas = 0;
+    for(const c of (r.conversas||[])){
+      if(!existentes.has(c.id)){ conversas.push(c); novas++; }
+      else {
+        const idx = conversas.findIndex(x => x.id === c.id);
+        if(idx >= 0 && c.trecho_match) conversas[idx].trecho_match = c.trecho_match;
+      }
+    }
+    BUSCA_PROFUNDA_ATIVA = true;
+    window.__ULTIMA_BUSCA_PROFUNDA = { termo, ids: new Set((r.conversas||[]).map(c => c.id)) };
+    toast(r.total + ' conversas encontradas com "' + termo + '"', '');
+    renderConversas(termo.toLowerCase());
+  } catch(e){
+    toast('Erro na busca profunda: '+e.message, 'err');
+  }
+}
+
+const _origFiltrar = window.filtrarConversas;
+if(typeof _origFiltrar === 'function'){
+  window.filtrarConversas = function(){
+    const v = (qs('#busca').value||'').trim();
+    if(!v && BUSCA_PROFUNDA_ATIVA){
+      BUSCA_PROFUNDA_ATIVA = false;
+      window.__ULTIMA_BUSCA_PROFUNDA = null;
+    }
+    return _origFiltrar.apply(this, arguments);
+  };
+}
 function setFiltroConsultor(usuario){
   FILTRO_CONSULTOR = String(usuario||'').trim().toLowerCase();
   const sel = qs('#fltConsultor');
@@ -3434,8 +3479,14 @@ function renderConversas(filtro){
     const fbExp     = qs('#fbExpiradas'); if(fbExp) fbExp.textContent = contExp;
   }
   // Aplica visão + busca
-  let arr = conversas.filter(conversaMatchVisao);
-  if(filtro)arr=arr.filter(c=>(c.nome||'').toLowerCase().includes(filtro)||(c.telefone||'').includes(filtro)||(c.ultima_msg||'').toLowerCase().includes(filtro));
+  let arr;
+  if(BUSCA_PROFUNDA_ATIVA && window.__ULTIMA_BUSCA_PROFUNDA){
+    const idsMatch = window.__ULTIMA_BUSCA_PROFUNDA.ids;
+    arr = conversas.filter(c => idsMatch.has(c.id));
+  } else {
+    arr = conversas.filter(conversaMatchVisao);
+    if(filtro)arr=arr.filter(c=>(c.nome||'').toLowerCase().includes(filtro)||(c.telefone||'').includes(filtro)||(c.ultima_msg||'').toLowerCase().includes(filtro));
+  }
   // Ordenação: pendentes (última msg do cliente) sempre no topo; dentro de cada grupo, mais recentes primeiro
   arr.sort((a,b)=>{
     const aPend = a.ultima_direcao==='in' ? 0 : 1;
