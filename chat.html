@@ -3194,7 +3194,9 @@ async function abrirFecharMassaHS(){
   if(!window.__DIST_SEL.size){ toast('Selecione pelo menos 1 conversa', 'err'); return; }
   document.getElementById('hsMassaCount').textContent = window.__DIST_SEL.size;
   document.getElementById('hsMassaProgress').style.display = 'none';
-  document.getElementById('hsMassaBtnGo').disabled = false;
+  const btnReset = document.getElementById('hsMassaBtnGo');
+  btnReset.disabled = false;
+  btnReset.innerHTML = '<i class="bi bi-bullseye"></i> Fechar tudo';
   // Carrega pipelines
   const selPip = document.getElementById('hsMassaPip');
   selPip.innerHTML = '<option value="">Carregando...</option>';
