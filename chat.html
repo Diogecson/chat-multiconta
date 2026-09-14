@@ -1113,6 +1113,12 @@ body,html{height:100%;margin:0;overflow:hidden;background:var(--bg);
         <button class="sb-flt-periodo-clear" id="fltDataClear" onclick="limparFiltroData()" title="Limpar filtro de data" style="display:none"><i class="bi bi-x-lg"></i></button>
       </div>
     </div>
+    <div style="padding:4px 8px">
+      <button id="btnSoPendentes" onclick="toggleSoPendentes()" title="Mostrar só conversas aguardando sua resposta (bolinha vermelha)" style="width:100%;padding:6px 10px;border:1.5px solid var(--line);background:#fff;border-radius:8px;font-size:.78rem;font-weight:600;color:#334155;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:all .15s">
+        <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#ef4444"></span>
+        <span id="btnSoPendentesLabel">Só pendentes</span>
+      </button>
+    </div>
     <div class="sb-search">
       <div class="sb-search-wrap">
         <i class="bi bi-search"></i>
@@ -1531,6 +1537,14 @@ body,html{height:100%;margin:0;overflow:hidden;background:var(--bg);
       <button class="up-close" onclick="fecharModalTpl()"><i class="bi bi-x-lg"></i></button>
     </div>
     <div class="tpl-body">
+      <div id="tplSearchWrap" style="display:none;padding:8px 12px;background:#f7f8fa;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:2">
+        <div style="position:relative">
+          <i class="bi bi-search" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:.85rem;pointer-events:none"></i>
+          <input id="tplSearch" type="text" placeholder="Buscar template pelo nome ou texto..." oninput="filtrarTemplates()" style="width:100%;padding:8px 32px 8px 32px;border:1px solid var(--line);border-radius:8px;font-size:.85rem;outline:none;background:#fff">
+          <button id="tplSearchClear" onclick="limparBuscaTemplates()" style="display:none;position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:1rem;padding:2px 6px" title="Limpar"><i class="bi bi-x-circle-fill"></i></button>
+        </div>
+        <div id="tplSearchInfo" style="font-size:.7rem;color:var(--muted);margin-top:4px;display:none"></div>
+      </div>
       <div class="tpl-list" id="tplList">
         <div class="tpl-empty"><div class="spinner-border spinner-border-sm text-primary"></div><br>Carregando templates da Meta...</div>
       </div>
@@ -2510,14 +2524,16 @@ async function carregarConversasFinalizadas(){
 async function setVisao(v){
   VISAO = v;
   document.querySelectorAll('.sb-filtro').forEach(b => b.classList.toggle('active', b.getAttribute('data-visao') === v));
+  // Se abriu Matriculas ou Finalizadas, garante que temos o historico completo carregado
   if(v === 'matriculas' || v === 'finalizadas'){
     await carregarConversasFinalizadas();
   }
   renderConversas(qs('#busca').value.toLowerCase().trim());
 }
 
+// Busca profunda no texto das mensagens (aciona ao apertar Enter no input de busca)
 let BUSCA_PROFUNDA_ATIVA = false;
-let BUSCA_PROFUNDA_CONVERSAS = [];
+let BUSCA_PROFUNDA_CONVERSAS = []; // cache das conversas encontradas
 function mergeBuscaProfundaEmConversas(){
   if(!BUSCA_PROFUNDA_ATIVA || !BUSCA_PROFUNDA_CONVERSAS.length) return;
   const existentes = new Set((conversas||[]).map(c => c.id));
@@ -2554,6 +2570,7 @@ async function buscarMensagensProfundas(){
   }
 }
 
+// Ao limpar o input (ou tirar 3+ chars), sai do modo busca profunda
 const _origFiltrar = window.filtrarConversas;
 if(typeof _origFiltrar === 'function'){
   window.filtrarConversas = function(){
@@ -2577,6 +2594,26 @@ function setFiltroConsultor(usuario){
 }
 let FILTRO_ETIQUETA = '';
 let FILTRO_ETIQUETA2 = '';
+let FILTRO_SO_PENDENTES = false;
+function toggleSoPendentes(){
+  FILTRO_SO_PENDENTES = !FILTRO_SO_PENDENTES;
+  const btn = qs('#btnSoPendentes');
+  const lbl = qs('#btnSoPendentesLabel');
+  if(btn){
+    if(FILTRO_SO_PENDENTES){
+      btn.style.background = '#fee2e2';
+      btn.style.borderColor = '#ef4444';
+      btn.style.color = '#991b1b';
+      if(lbl) lbl.textContent = 'Só pendentes ✓';
+    } else {
+      btn.style.background = '#fff';
+      btn.style.borderColor = 'var(--line)';
+      btn.style.color = '#334155';
+      if(lbl) lbl.textContent = 'Só pendentes';
+    }
+  }
+  renderConversas((qs('#busca')?.value||'').trim().toLowerCase());
+}
 function setFiltroEtiqueta(etiq){
   FILTRO_ETIQUETA = String(etiq||'').trim();
   const sel = qs('#fltEtiqueta');
@@ -3284,11 +3321,13 @@ async function abrirFecharMassaHS(){
   // Motivos chat locais (tipo perda)
   if(!MOTIVOS_CACHE.length) await carregarMotivos();
   const selMotChat = document.getElementById('hsMassaMotChat');
+  // Reseta pra tipo "perda" ao abrir
   HS_MASSA_TIPO = 'perda';
   const motivosPerda = (MOTIVOS_CACHE||[]).filter(m => (m.tipo||'perda') === 'perda');
   selMotChat.innerHTML = '<option value="">— Sem motivo local —</option>' +
     motivosPerda.map(m => `<option value="${escapeAttr(m.codigo)}">${escapeHtml(m.nome)}</option>`).join('');
   document.getElementById('hsMassaBack').classList.add('on');
+  // Aplica visual do botão default
   setTimeout(() => { if(typeof hsMassaSetTipo === 'function') hsMassaSetTipo('perda'); }, 100);
 }
 
@@ -3296,7 +3335,7 @@ function fecharHSMassa(){
   document.getElementById('hsMassaBack').classList.remove('on');
 }
 
-let HS_MASSA_TIPO = 'perda';
+let HS_MASSA_TIPO = 'perda'; // 'perda' | 'ganho'
 function hsMassaSetTipo(tipo){
   HS_MASSA_TIPO = tipo === 'ganho' ? 'ganho' : 'perda';
   const btnP = document.getElementById('hsTipoPerda');
@@ -3315,6 +3354,7 @@ function hsMassaSetTipo(tipo){
     document.getElementById('hsMassaAviso').innerHTML = '<i class="bi bi-check-circle-fill" style="color:#16a34a"></i> Marca o deal como MATRICULADO/GANHO + finaliza o chat.';
   }
   hsMassaSetPipeline();
+  // Repopula motivos do chat filtrado pelo tipo
   const selMotChat = document.getElementById('hsMassaMotChat');
   const motivosFiltrados = (MOTIVOS_CACHE||[]).filter(m => (m.tipo||'perda') === HS_MASSA_TIPO);
   selMotChat.innerHTML = '<option value="">— Sem motivo local —</option>' +
@@ -3331,12 +3371,14 @@ function hsMassaSetPipeline(){
   }
   let etapas;
   if(HS_MASSA_TIPO === 'ganho'){
+    // Etapas de GANHO: probability=1 OU labels de ganho/matriculado/won
     etapas = (pip.stages||[]).filter(s => {
       if(Number(s.probability) === 1) return true;
       const lbl = (s.label||'').toLowerCase();
       return lbl.includes('ganho') || lbl.includes('matricul') || lbl.includes('won') || lbl.includes('fechad');
     });
   } else {
+    // Etapas de PERDA: probability=0 OU labels de perda/lost/desist
     etapas = (pip.stages||[]).filter(s => {
       if(Number(s.probability) === 0) return true;
       const lbl = (s.label||'').toLowerCase();
@@ -3393,6 +3435,7 @@ async function executarFecharMassaHS(){
   btn.disabled = true;
   const prog = document.getElementById('hsMassaProgress');
   prog.style.display = 'block';
+  // Estimativa: ~1.5s por deal (HubSpot API + PATCH + finaliza chat)
   const SEG_POR_DEAL = 1.5;
   const inicio = Date.now();
   const totalEstimadoSeg = Math.ceil(total * SEG_POR_DEAL);
@@ -3489,12 +3532,14 @@ function renderConversas(filtro){
   // Aplica visão + busca
   let arr;
   if(BUSCA_PROFUNDA_ATIVA && window.__ULTIMA_BUSCA_PROFUNDA){
+    // Modo busca profunda: mostra APENAS os ids retornados pela API, ignora visão
     const idsMatch = window.__ULTIMA_BUSCA_PROFUNDA.ids;
     arr = conversas.filter(c => idsMatch.has(c.id));
   } else {
     arr = conversas.filter(conversaMatchVisao);
     if(filtro)arr=arr.filter(c=>(c.nome||'').toLowerCase().includes(filtro)||(c.telefone||'').includes(filtro)||(c.ultima_msg||'').toLowerCase().includes(filtro));
   }
+  if(FILTRO_SO_PENDENTES) arr = arr.filter(c => c.ultima_direcao === 'in');
   // Ordenação: pendentes (última msg do cliente) sempre no topo; dentro de cada grupo, mais recentes primeiro
   arr.sort((a,b)=>{
     const aPend = a.ultima_direcao==='in' ? 0 : 1;
@@ -4534,11 +4579,30 @@ async function abrirModalTemplate(){
     renderTplList(templatesCache[conta.id]);
   }catch(e){ qs('#tplList').innerHTML='<div class="tpl-empty" style="color:var(--err)"><i class="bi bi-wifi-off"></i>'+escapeHtml(e.message)+'</div>' }
 }
+let TPL_APROVADOS = [];
 function renderTplList(arr){
   // filtra só aprovados
   const aprov = arr.filter(t => (t.status||'').toUpperCase()==='APPROVED');
-  if(!aprov.length){ qs('#tplList').innerHTML='<div class="tpl-empty"><i class="bi bi-tag"></i>Nenhum template APROVADO ainda.<br><br><a href="#" onclick="event.preventDefault();fecharModalTpl();abrirTemplates()" style="color:#1877f2">Ir pra Templates HSM</a> pra criar/aguardar aprovação.</div>';return }
-  qs('#tplList').innerHTML = aprov.map(t=>{
+  TPL_APROVADOS = aprov;
+  const wrap = qs('#tplSearchWrap');
+  if(!aprov.length){
+    if(wrap) wrap.style.display='none';
+    qs('#tplList').innerHTML='<div class="tpl-empty"><i class="bi bi-tag"></i>Nenhum template APROVADO ainda.<br><br><a href="#" onclick="event.preventDefault();fecharModalTpl();abrirTemplates()" style="color:#1877f2">Ir pra Templates HSM</a> pra criar/aguardar aprovação.</div>';
+    return;
+  }
+  if(wrap) wrap.style.display = aprov.length > 5 ? 'block' : 'none';
+  const busca = qs('#tplSearch');
+  if(busca) busca.value = '';
+  const clr = qs('#tplSearchClear'); if(clr) clr.style.display='none';
+  const info = qs('#tplSearchInfo'); if(info) info.style.display='none';
+  desenharTplCards(aprov);
+}
+function desenharTplCards(lista){
+  if(!lista.length){
+    qs('#tplList').innerHTML = '<div class="tpl-empty"><i class="bi bi-search"></i>Nenhum template encontrado.</div>';
+    return;
+  }
+  qs('#tplList').innerHTML = lista.map(t=>{
     const body = (t.components||[]).find(c=>c.type==='BODY');
     const preview = body ? body.text : '';
     const cat = (t.category||'').toLowerCase();
@@ -4548,6 +4612,34 @@ function renderTplList(arr){
       <div class="tc-meta"><span class="pill ${cat}">${escapeHtml(t.category||'')}</span><span style="font-size:.68rem;color:var(--muted)">${escapeHtml(t.language||'')}</span></div>
     </div>`;
   }).join('');
+}
+function filtrarTemplates(){
+  const termo = (qs('#tplSearch')?.value||'').trim().toLowerCase();
+  const clr = qs('#tplSearchClear');
+  const info = qs('#tplSearchInfo');
+  if(clr) clr.style.display = termo ? 'block' : 'none';
+  if(!termo){
+    if(info) info.style.display='none';
+    desenharTplCards(TPL_APROVADOS);
+    return;
+  }
+  const filtrados = TPL_APROVADOS.filter(t=>{
+    const nome = (t.name||'').toLowerCase();
+    const cat = (t.category||'').toLowerCase();
+    const body = (t.components||[]).find(c=>c.type==='BODY');
+    const texto = body ? (body.text||'').toLowerCase() : '';
+    return nome.includes(termo) || texto.includes(termo) || cat.includes(termo);
+  });
+  if(info){
+    info.style.display='block';
+    info.textContent = `${filtrados.length} de ${TPL_APROVADOS.length} template(s)`;
+  }
+  desenharTplCards(filtrados);
+}
+function limparBuscaTemplates(){
+  const b = qs('#tplSearch');
+  if(b){ b.value=''; b.focus(); }
+  filtrarTemplates();
 }
 function selecionarTpl(name, lang){
   const conta = contas.find(x=>x.id===conversaAtiva.conta_id);
