@@ -4183,6 +4183,10 @@ function renderCorpoMsg(m){
   if(m.tipo==='template'){
     return `<div class="msg-tipo"><i class="bi bi-tag-fill"></i>template HSM</div><div class="msg-txt">${escapeHtml(caption)}</div>`;
   }
+  if(m.tipo==='reaction'){
+    const emoji = caption || '❤';
+    return `<div style="font-size:1.6rem;line-height:1.2;padding:2px 0">${escapeHtml(emoji)}<span style="font-size:.62rem;color:var(--muted);margin-left:6px;vertical-align:middle;font-weight:600">reagiu</span></div>`;
+  }
   return `<div class="msg-txt">${escapeHtml(caption)}</div>`;
 }
 function escapeAttr(s){return (s+'').replace(/["'&<>]/g,c=>({'"':'&quot;',"'":'&#39;','&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}
