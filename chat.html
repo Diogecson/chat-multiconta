@@ -1566,6 +1566,25 @@ body,html{height:100%;margin:0;overflow:hidden;background:var(--bg);
   </div>
 </div>
 
+<!-- MODAL Escolher Triagem -->
+<div id="triSelBack" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9999;align-items:center;justify-content:center" onclick="if(event.target===this)fecharTriSelModal()">
+  <div style="background:#fff;border-radius:12px;padding:22px 24px;width:92%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.35)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <h3 style="margin:0;font-size:1.05rem;color:#0f172a"><i class="bi bi-funnel-fill" style="color:#7c3aed"></i> Ativar triagem IA</h3>
+      <button onclick="fecharTriSelModal()" style="background:none;border:none;font-size:1.2rem;color:#64748b;cursor:pointer"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <p style="font-size:.85rem;color:#475569;margin:0 0 12px">Escolha qual fluxo de triagem quer usar nessa conversa:</p>
+    <select id="triSelDropdown" style="width:100%;padding:10px 12px;border:1.5px solid #cbd5e1;border-radius:8px;font-size:.9rem;background:#fff;color:#0f172a;margin-bottom:14px">
+      <option value="">Carregando triagens...</option>
+    </select>
+    <div id="triSelInfo" style="font-size:.72rem;color:#64748b;margin-bottom:16px;min-height:18px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button onclick="fecharTriSelModal()" style="padding:9px 16px;border:1px solid #cbd5e1;background:#fff;color:#475569;border-radius:8px;font-size:.85rem;font-weight:600;cursor:pointer">Cancelar</button>
+      <button id="triSelBtnOk" onclick="confirmarAtivarTriagem()" style="padding:9px 16px;border:none;background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;border-radius:8px;font-size:.85rem;font-weight:700;cursor:pointer">Ativar triagem</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL Agendar Retorno -->
 <div class="rt-back" id="rtNovoBack">
   <div class="rt-card">
@@ -1730,6 +1749,7 @@ const URL_RT_CONCL    = BASE + "/chat-retorno-concluir";
 const URL_TRI_ATIVAS  = BASE + "/chat-triagem-ativas";
 const URL_TRI_ATIVAR  = BASE + "/chat-triagem-ativar-conversa";
 const URL_TRI_DESAT   = BASE + "/chat-triagem-desativar-conversa";
+const URL_TRI_CFG_LIST = BASE + "/chat-triagem-config-list";
 const URL_RESP_LIST   = BASE + "/chat-respostas-list";
 
 let TOKEN = "";
@@ -6702,15 +6722,66 @@ async function alternarTriagem(){
       else toast('Erro: '+(r.erro||'servidor'),'err');
     } catch(e){ toast('Erro: '+e.message,'err'); }
   } else {
-    if(!confirm('Ativar triagem IA? A IA vai fazer as perguntas configuradas com esse cliente antes de você responder.')) return;
-    try {
-      const r = await api(URL_TRI_ATIVAR, {method:'POST', bodyObj:{
-        conta_id: conversaAtiva.conta_id,
-        telefone: conversaAtiva.telefone
-      }});
-      if(r.ok){ toast('Triagem ativada. IA vai iniciar em segundos.',''); carregarTriagensAtivas(); }
-      else toast('Erro: '+(r.erro||'servidor'),'err');
-    } catch(e){ toast('Erro: '+e.message,'err'); }
+    abrirTriSelModal();
+  }
+}
+
+async function abrirTriSelModal(){
+  const back = qs('#triSelBack');
+  const dd = qs('#triSelDropdown');
+  const info = qs('#triSelInfo');
+  if(!back || !dd) return;
+  dd.innerHTML = '<option value="">Carregando triagens...</option>';
+  if(info) info.textContent = '';
+  back.style.display = 'flex';
+  try {
+    const r = await api(URL_TRI_CFG_LIST);
+    const configs = (r && (r.configs || r.triagens || r.data)) || [];
+    if(!Array.isArray(configs) || !configs.length){
+      dd.innerHTML = '<option value="">Nenhuma triagem cadastrada</option>';
+      if(info) info.innerHTML = '⚠️ Cadastre triagens em <b>Triagem IA</b> primeiro.';
+      return;
+    }
+    configs.sort((a,b) => (b.ativa?1:0) - (a.ativa?1:0) || String(a.nome||a.codigo).localeCompare(String(b.nome||b.codigo)));
+    dd.innerHTML = configs.map(c => {
+      const codigo = c.codigo || '';
+      const nome = c.nome || codigo;
+      const badge = c.ativa ? ' ⭐ (ativa global)' : '';
+      return `<option value="${escapeAttr(codigo)}">${escapeHtml(nome)}${badge}</option>`;
+    }).join('');
+  } catch(e){
+    dd.innerHTML = '<option value="">Erro ao carregar</option>';
+    if(info) info.textContent = 'Erro: ' + e.message;
+  }
+}
+function fecharTriSelModal(){
+  const back = qs('#triSelBack');
+  if(back) back.style.display = 'none';
+}
+async function confirmarAtivarTriagem(){
+  if(!conversaAtiva){ toast('Selecione uma conversa primeiro','warn'); return; }
+  const dd = qs('#triSelDropdown');
+  const triagem_codigo = dd ? dd.value : '';
+  if(!triagem_codigo){ toast('Escolha uma triagem','warn'); return; }
+  const btn = qs('#triSelBtnOk');
+  if(btn){ btn.disabled = true; btn.textContent = 'Ativando...'; }
+  try {
+    const r = await api(URL_TRI_ATIVAR, {method:'POST', bodyObj:{
+      conta_id: conversaAtiva.conta_id,
+      telefone: conversaAtiva.telefone,
+      triagem_codigo,
+      usuario: USUARIO || 'sistema'
+    }});
+    if(r.ok){
+      toast('Triagem ativada. IA vai iniciar em segundos.','');
+      carregarTriagensAtivas();
+      fecharTriSelModal();
+    } else {
+      toast('Erro: '+(r.erro||'servidor'),'err');
+    }
+  } catch(e){ toast('Erro: '+e.message,'err'); }
+  finally {
+    if(btn){ btn.disabled = false; btn.textContent = 'Ativar triagem'; }
   }
 }
 </script>
