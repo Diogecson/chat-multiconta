@@ -5079,7 +5079,7 @@ async function previewIAAtendimento(){
   __IA_PREV_TEXTO = '';
   const body = qs('#iaPrevBody');
   const btnEnv = qs('#iaPrevBtnEnviar');
-  if(body) body.textContent = 'Analisando conversa e consultando guias...';
+  if(body){ body.textContent = 'Analisando conversa e consultando guias...'; body.style.background='#f0fdf4'; body.style.borderColor='#86efac'; body.style.color='#064e3b'; }
   if(btnEnv) btnEnv.style.display = 'none';
   qs('#iaPrevBack').style.display = 'flex';
   try {
@@ -5092,8 +5092,34 @@ async function previewIAAtendimento(){
     const txt = await r.text();
     let d; try { d = JSON.parse(txt); } catch(_){ d = { ok:false, sugestao:'Resposta inválida do servidor' }; }
     const resposta = (d && (d.sugestao || d.resposta)) || '(IA não gerou resposta)';
+    const acao = String(d && d.acao || 'responder').toLowerCase();
+    const motivo = String(d && d.motivo || '');
     __IA_PREV_TEXTO = resposta;
-    if(body) body.textContent = resposta;
+
+    // Cor + banner conforme ação
+    let bannerHtml = '';
+    let bg='#f0fdf4', bd='#86efac', txtCor='#064e3b';
+    if(acao === 'sem_interesse'){
+      bg='#fef3c7'; bd='#fcd34d'; txtCor='#78350f';
+      bannerHtml = '<div style="background:#f59e0b;color:#fff;padding:6px 10px;border-radius:6px;font-size:.72rem;font-weight:700;margin-bottom:10px">⚠️ IA identificou: SEM INTERESSE</div>' +
+        '<div style="font-size:.72rem;color:#78350f;margin-bottom:8px"><b>Motivo:</b> ' + escapeHtml(motivo) + '</div>' +
+        '<div style="background:#fff7ed;border:1px dashed #fdba74;padding:8px 10px;border-radius:6px;font-size:.7rem;color:#7c2d12;margin-bottom:10px"><b>🚧 Ao ativar em produção:</b><br>• Finaliza a conversa<br>• Tag "sem interesse"<br>• Atribui a consultor (rotação)<br>• HubSpot: marca deal como perdido</div>';
+    } else if(acao === 'escalar_humano'){
+      bg='#dbeafe'; bd='#93c5fd'; txtCor='#1e3a8a';
+      bannerHtml = '<div style="background:#3b82f6;color:#fff;padding:6px 10px;border-radius:6px;font-size:.72rem;font-weight:700;margin-bottom:10px">👨‍💼 IA identificou: ESCALAR PRA HUMANO</div>' +
+        '<div style="font-size:.72rem;color:#1e3a8a;margin-bottom:8px"><b>Motivo:</b> ' + escapeHtml(motivo) + '</div>' +
+        '<div style="background:#eff6ff;border:1px dashed #93c5fd;padding:8px 10px;border-radius:6px;font-size:.7rem;color:#1e3a8a;margin-bottom:10px"><b>🚧 Ao ativar em produção:</b><br>• Pausa a IA nessa conversa<br>• Atribui a um consultor livre</div>';
+    } else {
+      bannerHtml = '<div style="background:#10b981;color:#fff;padding:6px 10px;border-radius:6px;font-size:.72rem;font-weight:700;margin-bottom:10px">💬 IA vai responder normalmente</div>' +
+        (motivo ? '<div style="font-size:.72rem;color:#064e3b;margin-bottom:8px"><b>Motivo:</b> ' + escapeHtml(motivo) + '</div>' : '');
+    }
+
+    if(body){
+      body.style.background = bg;
+      body.style.borderColor = bd;
+      body.style.color = txtCor;
+      body.innerHTML = bannerHtml + '<div style="white-space:pre-wrap;font-family:system-ui,sans-serif">' + escapeHtml(resposta) + '</div>';
+    }
     if(btnEnv) btnEnv.style.display = 'inline-flex';
   } catch(e){
     if(body) body.textContent = 'Erro: ' + e.message;
