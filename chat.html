@@ -5094,6 +5094,7 @@ async function previewIAAtendimento(){
     const resposta = (d && (d.sugestao || d.resposta)) || '(IA não gerou resposta)';
     const acao = String(d && d.acao || 'responder').toLowerCase();
     const motivo = String(d && d.motivo || '');
+    const consultor = String(d && d.consultor || '');
     __IA_PREV_TEXTO = resposta;
 
     // Cor + banner conforme ação
@@ -5109,6 +5110,11 @@ async function previewIAAtendimento(){
       bannerHtml = '<div style="background:#3b82f6;color:#fff;padding:6px 10px;border-radius:6px;font-size:.72rem;font-weight:700;margin-bottom:10px">👨‍💼 IA identificou: ESCALAR PRA HUMANO</div>' +
         '<div style="font-size:.72rem;color:#1e3a8a;margin-bottom:8px"><b>Motivo:</b> ' + escapeHtml(motivo) + '</div>' +
         '<div style="background:#eff6ff;border:1px dashed #93c5fd;padding:8px 10px;border-radius:6px;font-size:.7rem;color:#1e3a8a;margin-bottom:10px"><b>🚧 Ao ativar em produção:</b><br>• Pausa a IA nessa conversa<br>• Atribui a um consultor livre</div>';
+    } else if(acao === 'escalar_consultor'){
+      bg='#ede9fe'; bd='#c4b5fd'; txtCor='#4c1d95';
+      bannerHtml = '<div style="background:#7c3aed;color:#fff;padding:6px 10px;border-radius:6px;font-size:.72rem;font-weight:700;margin-bottom:10px">👥 IA identificou: ESCALAR PRA CONSULTOR ESPECÍFICO' + (consultor?' → '+escapeHtml(consultor):'') + '</div>' +
+        '<div style="font-size:.72rem;color:#4c1d95;margin-bottom:8px"><b>Motivo:</b> ' + escapeHtml(motivo) + '</div>' +
+        '<div style="background:#f5f3ff;border:1px dashed #c4b5fd;padding:8px 10px;border-radius:6px;font-size:.7rem;color:#4c1d95;margin-bottom:10px"><b>🚧 Ao ativar em produção:</b><br>• Verifica se ' + escapeHtml(consultor||'o nome') + ' existe no time<br>• Atribui a esse consultor (se existir)<br>• Se não existir → atribui ao admin<br>• Pausa a IA</div>';
     } else {
       bannerHtml = '<div style="background:#10b981;color:#fff;padding:6px 10px;border-radius:6px;font-size:.72rem;font-weight:700;margin-bottom:10px">💬 IA vai responder normalmente</div>' +
         (motivo ? '<div style="font-size:.72rem;color:#064e3b;margin-bottom:8px"><b>Motivo:</b> ' + escapeHtml(motivo) + '</div>' : '');
