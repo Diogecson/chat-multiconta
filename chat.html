@@ -1578,9 +1578,10 @@ body,html{height:100%;margin:0;overflow:hidden;background:var(--bg);
     <div id="iaPrevBody" style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:14px;font-size:.9rem;color:#064e3b;line-height:1.5;min-height:80px;white-space:pre-wrap;font-family:system-ui,sans-serif">
       Carregando...
     </div>
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap">
       <button onclick="fecharIAPrev()" style="padding:9px 16px;border:1px solid #cbd5e1;background:#fff;color:#475569;border-radius:8px;font-size:.85rem;font-weight:600;cursor:pointer">Fechar</button>
       <button id="iaPrevBtnEnviar" onclick="enviarPreviewIA()" style="display:none;padding:9px 16px;border:none;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border-radius:8px;font-size:.85rem;font-weight:700;cursor:pointer"><i class="bi bi-send-fill"></i> Colar no chat</button>
+      <button id="iaPrevBtnExec" onclick="executarAcaoIA()" style="display:none;padding:9px 16px;border:none;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border-radius:8px;font-size:.85rem;font-weight:700;cursor:pointer"><i class="bi bi-lightning-fill"></i> Executar ação real</button>
     </div>
   </div>
 </div>
@@ -5045,6 +5046,7 @@ carregarTemaSalvo();
 let iaSugestaoAtual = '';
 const URL_IA = BASE + '/painel-ajuda-ia-chat';
 const URL_IA_ATEND_PREVIEW = BASE + '/chat-ia-atendimento-preview';
+const URL_IA_ATEND_EXECUTAR = BASE + '/chat-ia-atendimento-executar';
 
 function formatarConversaParaIA(){
   // TODAS as msgs em ordem cronológica, com data/hora curta em cada linha
@@ -5072,6 +5074,7 @@ function formatarConversaParaIA(){
 }
 
 let __IA_PREV_TEXTO = '';
+let __IA_PREV_DADOS = null;
 async function previewIAAtendimento(){
   if(!conversaAtiva){ toast('Selecione uma conversa primeiro','warn'); return; }
   const btn = qs('#btnIAPrev');
@@ -5096,6 +5099,11 @@ async function previewIAAtendimento(){
     const motivo = String(d && d.motivo || '');
     const consultor = String(d && d.consultor || '');
     __IA_PREV_TEXTO = resposta;
+    __IA_PREV_DADOS = {
+      conta_id: conversaAtiva.conta_id,
+      telefone: conversaAtiva.telefone,
+      acao, mensagem: resposta, motivo, consultor
+    };
 
     // Cor + banner conforme ação
     let bannerHtml = '';
@@ -5127,6 +5135,12 @@ async function previewIAAtendimento(){
       body.innerHTML = bannerHtml + '<div style="white-space:pre-wrap;font-family:system-ui,sans-serif">' + escapeHtml(resposta) + '</div>';
     }
     if(btnEnv) btnEnv.style.display = 'inline-flex';
+    const btnExec = qs('#iaPrevBtnExec');
+    if(btnExec){
+      btnExec.style.display = 'inline-flex';
+      const labels = { sem_interesse:'⚡ Executar (Sem Interesse)', escalar_humano:'⚡ Executar (Escalar Humano)', escalar_consultor:'⚡ Executar (Escalar '+ (consultor||'consultor') +')', responder:'⚡ Executar (Enviar msg)' };
+      btnExec.innerHTML = '<i class="bi bi-lightning-fill"></i> ' + (labels[acao] || labels.responder);
+    }
   } catch(e){
     if(body) body.textContent = 'Erro: ' + e.message;
   } finally {
@@ -5143,6 +5157,33 @@ function enviarPreviewIA(){
   if(t){ t.value = __IA_PREV_TEXTO; t.focus(); autoGrow && autoGrow(t); }
   fecharIAPrev();
   toast('Resposta colada no campo — revise antes de enviar','');
+}
+async function executarAcaoIA(){
+  if(!__IA_PREV_DADOS){ toast('Dados da IA não carregados','warn'); return; }
+  const acao = __IA_PREV_DADOS.acao;
+  const acoesTexto = { sem_interesse:'FINALIZAR conversa + tag "sem interesse" + pausar IA', escalar_humano:'PAUSAR IA + liberar pra fila', escalar_consultor:'PAUSAR IA + tentar atribuir a '+(__IA_PREV_DADOS.consultor||'?'), responder:'ENVIAR a mensagem' };
+  const conf = 'Confirmar execução:\n\n' + (acoesTexto[acao] || acoesTexto.responder) + '\n\nEssa ação vai afetar o cliente. Continuar?';
+  if(!confirm(conf)) return;
+  const btnExec = qs('#iaPrevBtnExec');
+  if(btnExec){ btnExec.disabled = true; btnExec.innerHTML = '<span class="spinner"></span> Executando...'; }
+  try {
+    const payload = JSON.stringify({ ...__IA_PREV_DADOS, usuario: USUARIO || 'admin' });
+    const r = await fetch(URL_IA_ATEND_EXECUTAR, { method:'POST', headers:{'Content-Type':'text/plain;charset=UTF-8'}, body: payload });
+    const txt = await r.text();
+    let d; try { d = JSON.parse(txt); } catch(_){ d = {ok:false, erro:'Resposta inválida'}; }
+    if(d.ok){
+      toast('Ação executada com sucesso ✓','');
+      fecharIAPrev();
+      if(typeof carregarConversas === 'function') carregarConversas();
+      if(typeof carregarMensagens === 'function') carregarMensagens();
+    } else {
+      toast('Erro: ' + (d.erro || 'servidor'), 'err');
+    }
+  } catch(e){
+    toast('Erro: ' + e.message, 'err');
+  } finally {
+    if(btnExec){ btnExec.disabled = false; }
+  }
 }
 
 async function pedirAjudaIA(){
