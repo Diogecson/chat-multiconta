@@ -5190,28 +5190,67 @@ async function toggleIAConversa(ativar){
 async function executarAcaoIA(){
   if(!__IA_PREV_DADOS){ toast('Dados da IA não carregados','warn'); return; }
   const acao = __IA_PREV_DADOS.acao;
-  const acoesTexto = { sem_interesse:'FINALIZAR conversa + tag "sem interesse" + pausar IA', escalar_humano:'PAUSAR IA + liberar pra fila', escalar_consultor:'PAUSAR IA + tentar atribuir a '+(__IA_PREV_DADOS.consultor||'?'), responder:'ENVIAR a mensagem' };
+  const acoesTexto = { sem_interesse:'FINALIZAR conversa + tag "sem interesse" + HubSpot perda + pausar IA', escalar_humano:'PAUSAR IA + liberar pra fila', escalar_consultor:'PAUSAR IA + tentar atribuir a '+(__IA_PREV_DADOS.consultor||'?'), responder:'ENVIAR a mensagem' };
   const conf = 'Confirmar execução:\n\n' + (acoesTexto[acao] || acoesTexto.responder) + '\n\nEssa ação vai afetar o cliente. Continuar?';
   if(!confirm(conf)) return;
   const btnExec = qs('#iaPrevBtnExec');
+  const body = qs('#iaPrevBody');
   if(btnExec){ btnExec.disabled = true; btnExec.innerHTML = '<span class="spinner"></span> Executando...'; }
   try {
     const payload = JSON.stringify({ ...__IA_PREV_DADOS, usuario: USUARIO || 'admin' });
     const r = await fetch(URL_IA_ATEND_EXECUTAR, { method:'POST', headers:{'Content-Type':'text/plain;charset=UTF-8'}, body: payload });
     const txt = await r.text();
     let d; try { d = JSON.parse(txt); } catch(_){ d = {ok:false, erro:'Resposta inválida'}; }
+
+    // Monta log visual dos passos
+    const passos = Array.isArray(d.passos) ? d.passos : [];
+    const labels = {
+      enviar_msg: '💬 Enviar mensagem',
+      tag_sem_interesse: '🏷️ Tag "Sem interesse"',
+      finalizar: '✅ Finalizar conversa',
+      hubspot_perda: '🎯 HubSpot: marcar perda',
+      pausa_ia: '⏸️ Pausar IA na conversa',
+      atribuir_consultor: '👥 Atribuir consultor'
+    };
+    let passosHtml = passos.length ? '<div style="margin-top:10px"><b style="font-size:.8rem">Passos executados:</b><ul style="margin:6px 0 0 0;padding-left:0;list-style:none">' +
+      passos.map(p => {
+        const label = labels[p.passo] || p.passo;
+        const icon = p.ok === false ? '<span style="color:#dc2626;font-weight:700">✗</span>' : '<span style="color:#059669;font-weight:700">✓</span>';
+        const det = p.detalhe ? ' — <span style="color:#64748b;font-size:.72rem">'+escapeHtml(String(p.detalhe))+'</span>' : (p.erro ? ' — <span style="color:#dc2626;font-size:.72rem">'+escapeHtml(String(p.erro))+'</span>' : '');
+        return '<li style="padding:4px 0;font-size:.78rem">'+icon+' '+escapeHtml(label)+det+'</li>';
+      }).join('') + '</ul></div>' : '';
+
     if(d.ok){
-      toast('Ação executada com sucesso ✓','');
-      fecharIAPrev();
+      if(body){
+        body.style.background = '#f0fdf4';
+        body.style.borderColor = '#86efac';
+        body.style.color = '#064e3b';
+        body.innerHTML = '<div style="background:#059669;color:#fff;padding:8px 12px;border-radius:6px;font-size:.85rem;font-weight:700;margin-bottom:8px">🚀 Ação executada com sucesso</div>' + passosHtml;
+      }
+      toast('Ação executada ✓','');
       if(typeof carregarConversas === 'function') carregarConversas();
       if(typeof carregarMensagens === 'function') carregarMensagens();
+      // Deixa o modal aberto pra usuário ver os passos, esconde botões de ação
+      if(btnExec) btnExec.style.display = 'none';
+      const btnEnv = qs('#iaPrevBtnEnviar'); if(btnEnv) btnEnv.style.display = 'none';
     } else {
+      if(body){
+        body.style.background = '#fef2f2';
+        body.style.borderColor = '#fca5a5';
+        body.style.color = '#7f1d1d';
+        body.innerHTML = '<div style="background:#dc2626;color:#fff;padding:8px 12px;border-radius:6px;font-size:.85rem;font-weight:700;margin-bottom:8px">❌ Erro ao executar</div><div style="font-size:.8rem;margin-bottom:8px">'+escapeHtml(d.erro||'Erro no servidor')+'</div>' + passosHtml;
+      }
       toast('Erro: ' + (d.erro || 'servidor'), 'err');
     }
   } catch(e){
+    if(body){
+      body.style.background = '#fef2f2';
+      body.style.borderColor = '#fca5a5';
+      body.innerHTML = '<div style="color:#7f1d1d">Erro de rede: ' + escapeHtml(e.message) + '</div>';
+    }
     toast('Erro: ' + e.message, 'err');
   } finally {
-    if(btnExec){ btnExec.disabled = false; }
+    if(btnExec){ btnExec.disabled = false; btnExec.innerHTML = '<i class="bi bi-lightning-fill"></i> Executar ação real'; }
   }
 }
 
