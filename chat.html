@@ -5511,16 +5511,26 @@ function renderSugestaoIA(raw){
 
   // Limpa restos de separador na sugestão (====, - - - -, * * * * etc)
   sugestao = sugestao
-    .replace(/^[\s]*[=\-*_~]{3,}[\s]*$/gm,'')              // linha só de separador
-    .replace(/^[\s]*(?:[=\-*_~]\s?){3,}[\s]*$/gm,'')       // separador com espaços: = = = =
+    .replace(/[=\-*_~]{3,}/g,'')                           // qualquer sequência de 3+ separadores
+    .replace(/(?:[=\-*_~]\s){3,}[=\-*_~]/g,'')             // separador com espaços: = = = =
     .replace(/\n{3,}/g,'\n\n')
     .trim();
 
   iaSugestaoAtual = sugestao;
 
-  const dicasHtml = dicasRaw
-    ? '<ol>' + dicasRaw.split(/\n/).map(l=>l.trim()).filter(Boolean).map(l=>l.replace(/^\d+[\.\)]\s*/,'')).map(l=>'<li>'+escapeHtml(l)+'</li>').join('') + '</ol>'
-    : '';
+  // Dicas: filtra separadores e itens vazios, remove bold residual, para quando encontra lixo
+  const dicasHtml = (()=>{
+    if(!dicasRaw) return '';
+    const items = dicasRaw.split(/\n/)
+      .map(l => l.trim())
+      .filter(Boolean)
+      .filter(l => !/^[=\-*_~\s]{2,}$/.test(l))                    // descarta linhas só de separador
+      .map(l => l.replace(/^\d+[\.\)]\s*/, ''))                    // remove "1. "
+      .map(l => l.replace(/\*\*([^*]+)\*\*/g, '$1'))               // remove bold residual
+      .filter(l => l.length > 3);                                  // descarta fragmentos tipo "---" ou "x"
+    if(!items.length) return '';
+    return '<ol>' + items.map(l => '<li>'+escapeHtml(l)+'</li>').join('') + '</ol>';
+  })();
 
   let html = '';
   if(situacao){
