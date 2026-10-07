@@ -5367,9 +5367,9 @@ async function toggleIAConversa(ativar){
         let ed; try { ed = JSON.parse(et); } catch(_){ ed = { ok:false }; }
         if(ed.ok){
           toast('IA ATIVADA ✓ + primeira resposta enviada 🤖','');
-          // Fecha o modal se tiver aberto
-          const modal = qs('#iaPrevModal');
-          if(modal) modal.style.display = 'none';
+          // Fecha o modal
+          if(typeof fecharIAPrev === 'function') fecharIAPrev();
+          else { const bg = qs('#iaPrevBack'); if(bg) bg.style.display = 'none'; }
           // Recarrega msgs pra mostrar a nova
           if(typeof carregarMensagens === 'function') carregarMensagens();
         } else {
@@ -5420,18 +5420,12 @@ async function executarAcaoIA(){
       }).join('') + '</ul></div>' : '';
 
     if(d.ok){
-      if(body){
-        body.style.background = '#f0fdf4';
-        body.style.borderColor = '#86efac';
-        body.style.color = '#064e3b';
-        body.innerHTML = '<div style="background:#059669;color:#fff;padding:8px 12px;border-radius:6px;font-size:.85rem;font-weight:700;margin-bottom:8px">🚀 Ação executada com sucesso</div>' + passosHtml;
-      }
       toast('Ação executada ✓','');
       if(typeof carregarConversas === 'function') carregarConversas();
       if(typeof carregarMensagens === 'function') carregarMensagens();
-      // Deixa o modal aberto pra usuário ver os passos, esconde botões de ação
-      if(btnExec) btnExec.style.display = 'none';
-      const btnEnv = qs('#iaPrevBtnEnviar'); if(btnEnv) btnEnv.style.display = 'none';
+      // Fecha o modal após executar com sucesso
+      if(typeof fecharIAPrev === 'function') fecharIAPrev();
+      else { const bg = qs('#iaPrevBack'); if(bg) bg.style.display = 'none'; }
     } else {
       if(body){
         body.style.background = '#fef2f2';
