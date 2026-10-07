@@ -4975,12 +4975,22 @@ function aplicarPermissoesPapel(){
     if(el.hasAttribute('data-super')) return;
     el.style.display = isAdmin ? '' : 'none';
   });
-  // Features toggle-áveis via Permissões: só USER é afetado. Admin+Super sempre veem.
-  if(!isAdmin && PERMISSOES_FEATURES){
+  // Features toggle-áveis via Permissões:
+  // - Admin/Super: sempre vê tudo → força reset do display (caso tenha sido escondido antes)
+  // - USER: só vê o que admin liberou em PERMISSOES_FEATURES
+  if(isAdmin){
+    document.querySelectorAll('[data-feat]').forEach(el => {
+      // Não sobrescreve se o item também é data-super (SUPER-only) e o atual não é SUPER
+      if(el.hasAttribute('data-super') && !isSuper) return;
+      el.style.display = '';
+    });
+  } else if(PERMISSOES_FEATURES){
     document.querySelectorAll('[data-feat]').forEach(el => {
       const key = el.getAttribute('data-feat');
       if(PERMISSOES_FEATURES[key] === false){
         el.style.display = 'none';
+      } else {
+        el.style.display = '';
       }
     });
   }
