@@ -215,11 +215,48 @@ async function api(url, opt){
   }
 }
 
+// Contas permitidas do usuário logado (SUPER vê tudo)
+let _MINHAS_CONTAS = '__all__';
+async function _carregarMinhasContas(){
+  const papel = String(localStorage.getItem('chat_papel')||'').toUpperCase();
+  if(papel === 'SUPER'){ _MINHAS_CONTAS = '__all__'; return; }
+  try {
+    const r = await fetch('https://plano-acao-high-performace-n8n.szlqqi.easypanel.host/webhook/chat-atendentes-list');
+    const j = await r.json();
+    const me = (j.atendentes||[]).find(a => String(a.usuario||'').toLowerCase() === String(USUARIO||'').toLowerCase());
+    if(me){
+      const raw = String(me.contas_permitidas || '').trim();
+      if(!raw || raw === '*' || raw.toLowerCase() === '__all__') _MINHAS_CONTAS = '__all__';
+      else if(raw.toLowerCase() === '__none__') _MINHAS_CONTAS = '__none__';
+      else _MINHAS_CONTAS = raw;
+    }
+  } catch(_){ _MINHAS_CONTAS = '__all__'; }
+}
+// Filtra lista de consultores pelos que compartilham ao menos 1 conta comigo
+function _filtrarConsultoresPorConta(lista){
+  if(!Array.isArray(lista)) return [];
+  if(_MINHAS_CONTAS === '__all__') return lista;
+  if(_MINHAS_CONTAS === '__none__') return [];
+  const minhasContas = new Set(_MINHAS_CONTAS.split(',').map(s=>s.trim()).filter(Boolean));
+  return lista.filter(a => {
+    const perm = String(a.contas_permitidas||'*').trim();
+    if(!perm || perm === '*' || perm.toLowerCase() === '__all__') return true;
+    if(perm.toLowerCase() === '__none__') return false;
+    const asContas = perm.split(',').map(s=>s.trim()).filter(Boolean);
+    return asContas.some(c => minhasContas.has(c));
+  });
+}
+
 async function carregar(){
   try {
+    await _carregarMinhasContas();
     const r = await api(URL_STATUS);
     if(!r.ok){ toast('Erro ao carregar', 'err'); return; }
-    ESTADO = r;
+    // Filtra fila + fora_fila pelos consultores com contas em comum
+    ESTADO = Object.assign({}, r, {
+      in_fila: _filtrarConsultoresPorConta(r.in_fila || []),
+      fora_fila: _filtrarConsultoresPorConta(r.fora_fila || [])
+    });
     renderStatus();
     renderFila();
     renderFora();

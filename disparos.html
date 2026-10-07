@@ -338,19 +338,15 @@ function sair(){
 }
 
 // ======== CARREGAR ATENDENTES (pra select "Consultor responsável") ========
+// Guarda a lista crua pra re-filtrar quando mudar conta
+let _ATENDENTES_RAW = [];
 async function carregarAtendentes(){
   const sel = qs('#fDono');
   if(!sel) return;
   try{
     const r = await api(URL_ATENDENTES);
-    let atd = (r.atendentes||[]).filter(a => (a.ativo !== false));
-    // Se nao for admin, mostra soh o proprio usuario (nao faz sentido admin nao ver todos)
-    if(PAPEL !== 'ADM' && PAPEL !== 'admin'){
-      atd = atd.filter(a => String(a.usuario||'').toLowerCase() === String(USUARIO||'').toLowerCase());
-    }
-    atd.sort((a,b) => String(a.nome||a.usuario||'').localeCompare(String(b.nome||b.usuario||'')));
-    sel.innerHTML = '<option value="">— Nenhum (auto-atribuir quando cliente responder) —</option>' +
-      atd.map(a => '<option value="'+escapeHtml((a.usuario||'').toLowerCase())+'">'+escapeHtml(a.nome||a.usuario)+'</option>').join('');
+    _ATENDENTES_RAW = (r.atendentes||[]).filter(a => (a.ativo !== false));
+    renderDropdownConsultores();
   }catch(e){ /* silencioso — campo continua opcional */ }
 }
 
@@ -400,11 +396,41 @@ async function carregarContas(){
   }catch(e){ toast('Erro ao carregar contas: '+e.message,'err'); }
 }
 
+// ======== Renderiza dropdown de consultores filtrados pela conta ativa ========
+// Admin/Super que NÃO escolheu conta: mostra todos ativos
+// Admin/Super com conta escolhida: mostra só os que têm essa conta em contas_permitidas
+// USER (não deveria chegar aqui — guard do head), mas se chegar, só ele mesmo
+function renderDropdownConsultores(){
+  const sel = qs('#fDono');
+  if(!sel) return;
+  const papel = String(PAPEL||'').toUpperCase();
+  const contaAtiva = (qs('#fConta')||{}).value || '';
+  let atd = _ATENDENTES_RAW.slice();
+  if(papel !== 'ADM' && papel !== 'ADMIN' && papel !== 'SUPER'){
+    atd = atd.filter(a => String(a.usuario||'').toLowerCase() === String(USUARIO||'').toLowerCase());
+  } else if(contaAtiva){
+    // Filtra: consultor precisa ter essa conta nas contas_permitidas (ou '*'/__all__)
+    atd = atd.filter(a => {
+      const perm = String(a.contas_permitidas||'*').trim();
+      if(!perm || perm === '*' || perm.toLowerCase() === '__all__') return true;
+      if(perm.toLowerCase() === '__none__') return false;
+      return perm.split(',').map(s=>s.trim()).includes(contaAtiva);
+    });
+  }
+  atd.sort((a,b) => String(a.nome||a.usuario||'').localeCompare(String(b.nome||b.usuario||'')));
+  sel.innerHTML = '<option value="">— Nenhum (auto-atribuir quando cliente responder) —</option>' +
+    atd.map(a => '<option value="'+escapeHtml((a.usuario||'').toLowerCase())+'">'+escapeHtml(a.nome||a.usuario)+'</option>').join('');
+}
+
 // ======== CARREGAR TEMPLATES ========
 async function onContaChange(){
   const conta_id = qs('#fConta').value;
   const sel = qs('#fTpl');
   templates = []; tplSelecionado = null; renderVars(); renderPreview();
+  // Re-renderiza consultores filtrados pela conta
+  renderDropdownConsultores();
+  // Recarrega etiquetas filtradas pela conta
+  carregarEtiquetasDatalist(conta_id);
   if(!conta_id){ sel.innerHTML='<option value="">— selecione uma conta —</option>'; return; }
   sel.innerHTML = '<option value="">— carregando —</option>';
   try{
@@ -775,9 +801,12 @@ async function retomarCampanha(campanha){
 let FDISPARO_ETIQS = new Set(); // etiquetas selecionadas na campanha nova
 let ETIQ_EXISTENTES = [];       // {etiqueta, total} do banco
 
-async function carregarEtiquetasDatalist(){
+async function carregarEtiquetasDatalist(conta_id){
   try{
-    const r = await fetch(URL_BASE + '/webhook/chat-etiquetas-list');
+    // Se não passou conta_id, tenta pegar do form (fConta); default __all__
+    const cId = conta_id || (qs('#fConta')||{}).value || '__all__';
+    const url = URL_BASE + '/webhook/chat-etiquetas-list?conta_id=' + encodeURIComponent(cId);
+    const r = await fetch(url);
     const j = await r.json();
     ETIQ_EXISTENTES = ((j && j.etiquetas) || []).sort((a,b) => (b.total||0)-(a.total||0));
     renderDropdownEtiq('');

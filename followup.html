@@ -221,10 +221,39 @@ async function api(path, body){
   return await r.json();
 }
 
+// Helper: pega contas permitidas do usuário logado (SUPER vê tudo)
+async function getContasPermitidasFU(){
+  const papel = String(localStorage.getItem('chat_papel')||'').toUpperCase();
+  if(papel === 'SUPER') return '__all__';
+  try {
+    const r = await fetch(BASE + '/chat-atendentes-list');
+    const j = await r.json();
+    const me = (j.atendentes||[]).find(a => String(a.usuario||'').toLowerCase() === String(localStorage.getItem('chat_usuario')||'').toLowerCase());
+    if(me){
+      const raw = String(me.contas_permitidas || '').trim();
+      if(!raw || raw === '*' || raw.toLowerCase() === '__all__') return '__all__';
+      if(raw.toLowerCase() === '__none__') return '__none__';
+      return raw;
+    }
+    return (papel === 'ADM' || papel === 'ADMIN') ? '__all__' : '__none__';
+  } catch(_){ return '__all__'; }
+}
+function _isContaPermFU(contaId, perm){
+  if(perm === '__all__' || perm === '*') return true;
+  if(!perm || perm === '__none__') return false;
+  return perm.split(',').map(s=>s.trim()).includes(String(contaId));
+}
+
 async function carregar(){
   try{
+    const perm = await getContasPermitidasFU();
     const r = await api('/chat-followup-list');
-    configs = r.configs || [];
+    let cfgs = r.configs || [];
+    // Filtra pelas contas permitidas
+    if(perm !== '__all__'){
+      cfgs = cfgs.filter(c => _isContaPermFU(c.conta_id || c.conta_codigo || c.id, perm));
+    }
+    configs = cfgs;
     render();
   }catch(e){ qs('#lista').innerHTML = '<div class="state" style="color:var(--err)">Erro: '+esc(e.message)+'</div>' }
 }
