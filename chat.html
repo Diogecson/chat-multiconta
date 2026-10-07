@@ -5509,8 +5509,12 @@ function renderSugestaoIA(raw){
   const alertaRaw = (texto.match(reAlr)||[])[1]?.trim() || '';
   const validar  = reVal.test(texto);
 
-  // Limpa restos de separador na sugestão (==== que ficou colado)
-  sugestao = sugestao.replace(/^[\s]*[=\-]{3,}[\s]*$/gm,'').trim();
+  // Limpa restos de separador na sugestão (====, - - - -, * * * * etc)
+  sugestao = sugestao
+    .replace(/^[\s]*[=\-*_~]{3,}[\s]*$/gm,'')              // linha só de separador
+    .replace(/^[\s]*(?:[=\-*_~]\s?){3,}[\s]*$/gm,'')       // separador com espaços: = = = =
+    .replace(/\n{3,}/g,'\n\n')
+    .trim();
 
   iaSugestaoAtual = sugestao;
 
