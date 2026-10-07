@@ -2561,10 +2561,10 @@ async function carregarConversas(reset){
     ULTIMO_DELTA_TS = new Date().toISOString();
     // Cache da primeira página (só pra abertura rápida na próxima sessão)
     if(reset) convCacheSet(conversas.slice(0, PAGE_SIZE_CONV));
-    // Merges legacy (finalizadas cacheadas, busca profunda) só no reset
+    // Server já traz finalizadas/matrículas corretamente respeitando conta e papel.
+    // Merge legacy de busca profunda só se o usuário acionou a busca profunda explicitamente.
     if(reset){
-      if(typeof mergeFinalizadasEmConversas === 'function') mergeFinalizadasEmConversas();
-      if(typeof mergeBuscaProfundaEmConversas === 'function') mergeBuscaProfundaEmConversas();
+      if(BUSCA_PROFUNDA_ATIVA && typeof mergeBuscaProfundaEmConversas === 'function') mergeBuscaProfundaEmConversas();
       carregarContadoresReais();
     }
     renderConversas();
@@ -2694,11 +2694,8 @@ async function carregarConversasFinalizadas(){
 async function setVisao(v){
   VISAO = v;
   document.querySelectorAll('.sb-filtro').forEach(b => b.classList.toggle('active', b.getAttribute('data-visao') === v));
-  // Se abriu Matriculas ou Finalizadas, garante que temos o historico completo carregado (legacy — hoje o server já traz)
-  if(v === 'matriculas' || v === 'finalizadas'){
-    await carregarConversasFinalizadas();
-  }
-  // Novo: mudar visão dispara reset + fetch da 1ª página com o filtro aplicado no server
+  // Mudar visão dispara reset + fetch da 1ª página com o filtro aplicado no server
+  // (não chama mais carregarConversasFinalizadas: o server já filtra matrículas/finalizadas respeitando conta_id e contas_permitidas)
   await carregarConversas(true);
 }
 
