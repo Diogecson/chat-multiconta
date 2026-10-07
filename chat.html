@@ -984,16 +984,16 @@ body,html{height:100%;margin:0;overflow:hidden;background:var(--bg);
       <a href="consulta.html" id="railConsulta" title="Consultar contatos (quais já têm chat)" data-feat="consulta"><i class="bi bi-search"></i></a>
       <a href="triagem.html" id="railTriagem" title="Configurar triagem IA" data-feat="triagem"><i class="bi bi-funnel-fill"></i></a>
       <a href="respostas.html" id="railRespostas" title="Respostas rápidas (digite / no chat)" data-feat="respostas"><i class="bi bi-lightning-charge-fill"></i></a>
-      <a href="gestao.html" id="railGestao" title="Painel de gestão (só admin)" data-admin><i class="bi bi-graph-up-arrow"></i></a>
+      <a href="gestao.html" id="railGestao" title="Painel de gestão (só SUPER)" data-super><i class="bi bi-graph-up-arrow"></i></a>
       <a href="#" id="railFollowup" onclick="event.preventDefault();abrirFollowup()" title="Follow-up IA — reengajamento automático" data-feat="followup"><i class="bi bi-robot"></i></a>
       <a href="#" onclick="event.preventDefault();abrirTemas()" title="Tema visual"><i class="bi bi-palette-fill"></i></a>
       <a href="#" id="railTemplates" onclick="event.preventDefault();abrirTemplates()" title="Templates HSM (Meta)" data-feat="templates"><i class="bi bi-tag-fill"></i></a>
-      <a href="#" id="railAtendentes" onclick="event.preventDefault();abrirAtendentes()" title="Gerenciar atendentes" data-admin><i class="bi bi-people-fill"></i></a>
+      <a href="#" id="railAtendentes" onclick="event.preventDefault();abrirAtendentes()" title="Gerenciar atendentes (só SUPER)" data-super><i class="bi bi-people-fill"></i></a>
       <a href="#" id="railFila" onclick="event.preventDefault();abrirFila()" title="Fila de distribuição" data-admin><i class="bi bi-shuffle"></i></a>
       <a href="#" id="railMotivos" onclick="event.preventDefault();abrirMotivos()" title="Motivos de fechamento" data-admin><i class="bi bi-tags-fill"></i></a>
-      <a href="#" id="railAdminLink" onclick="event.preventDefault();abrirAdminLink()" title="Empurrar atualização (link novo)" data-admin><i class="bi bi-megaphone-fill"></i></a>
-      <a href="#" id="railPermissoes" onclick="event.preventDefault();abrirPermissoes()" title="Permissões (o que USER vê)" data-admin><i class="bi bi-toggle-on"></i></a>
-      <a href="#" id="railContas" onclick="event.preventDefault();abrirContas()" title="Gerenciar contas" data-feat="contas"><i class="bi bi-gear-fill"></i></a>
+      <a href="#" id="railAdminLink" onclick="event.preventDefault();abrirAdminLink()" title="Empurrar atualização (só SUPER)" data-super><i class="bi bi-megaphone-fill"></i></a>
+      <a href="#" id="railPermissoes" onclick="event.preventDefault();abrirPermissoes()" title="Permissões (só SUPER)" data-super><i class="bi bi-toggle-on"></i></a>
+      <a href="#" id="railContas" onclick="event.preventDefault();abrirContas()" title="Gerenciar contas (só SUPER)" data-super><i class="bi bi-gear-fill"></i></a>
       <a href="#" onclick="event.preventDefault();sair()" class="sair" title="Sair"><i class="bi bi-box-arrow-right"></i></a>
     </div>
   </div>
@@ -4962,12 +4962,20 @@ async function carregarPermissoes(){
 }
 
 function aplicarPermissoesPapel(){
-  const isAdmin = USUARIO_PAPEL === 'ADM' || USUARIO_PAPEL === 'admin';
-  // Esconde/mostra itens do rail marcados com data-admin
+  const papel = String(USUARIO_PAPEL||'').toUpperCase();
+  const isSuper = papel === 'SUPER';
+  const isAdmin = isSuper || papel === 'ADM' || papel === 'ADMIN';
+  // data-super → só SUPER vê (atendentes, contas, permissoes, gestao, admin-link)
+  document.querySelectorAll('[data-super]').forEach(el => {
+    el.style.display = isSuper ? '' : 'none';
+  });
+  // data-admin → ADM e SUPER veem (configs operacionais da conta)
   document.querySelectorAll('[data-admin]').forEach(el => {
+    // Se já tem data-super (restritivo), não sobrescreve
+    if(el.hasAttribute('data-super')) return;
     el.style.display = isAdmin ? '' : 'none';
   });
-  // Features toggle-áveis: se USER e permissao=false, esconde. Admin vê tudo.
+  // Features toggle-áveis via Permissões: só USER é afetado. Admin+Super sempre veem.
   if(!isAdmin && PERMISSOES_FEATURES){
     document.querySelectorAll('[data-feat]').forEach(el => {
       const key = el.getAttribute('data-feat');

@@ -1,6 +1,17 @@
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
+<script>
+(function(){
+  var papel = String(localStorage.getItem('chat_papel')||'').toUpperCase();
+  var permitidos = ['SUPER','ADM','ADMIN'];
+  if(!permitidos.indexOf || permitidos.indexOf(papel) < 0){
+    try { document.documentElement.style.visibility='hidden'; } catch(_){}
+    alert('Voce nao tem permissao pra acessar essa pagina. Volte pelo chat.');
+    location.href = 'chat.html';
+  }
+})();
+</script>
 <meta charset="UTF-8">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%237c3aed'/><text x='16' y='22' text-anchor='middle' fill='white' font-family='Arial,sans-serif' font-size='15' font-weight='bold'>UF</text></svg>">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -343,15 +354,45 @@ async function carregarAtendentes(){
   }catch(e){ /* silencioso — campo continua opcional */ }
 }
 
-// ======== CARREGAR CONTAS (só Meta) ========
+// ======== CARREGAR CONTAS (só Meta, filtradas pelas permitidas do usuário logado) ========
+// Pega as contas permitidas do usuário atual via /chat-atendentes-list
+async function getContasPermitidasDoUsuario(){
+  const papel = String(localStorage.getItem('chat_papel')||'').toUpperCase();
+  if(papel === 'SUPER') return '__all__'; // SUPER vê tudo
+  try {
+    const r = await api(URL_BASE + '/webhook/chat-atendentes-list');
+    const me = (r.atendentes||[]).find(a => String(a.usuario||'').toLowerCase() === String(localStorage.getItem('chat_usuario')||'').toLowerCase());
+    if(me){
+      const raw = String(me.contas_permitidas || '').trim();
+      if(!raw || raw === '*' || raw.toLowerCase() === '__all__') return '__all__';
+      if(raw.toLowerCase() === '__none__') return '__none__';
+      return raw;
+    }
+    return (papel === 'ADM' || papel === 'ADMIN') ? '__all__' : '__none__';
+  } catch(_){ return '__all__'; }
+}
+function _isContaPermitidaDisparos(contaId, perm){
+  if(perm === '__all__' || perm === '*') return true;
+  if(!perm || perm === '__none__') return false;
+  return perm.split(',').map(s=>s.trim()).includes(String(contaId));
+}
 async function carregarContas(){
   try{
+    const perm = await getContasPermitidasDoUsuario();
     const r = await api(URL_CONTAS);
-    contas = (r.contas||[]).filter(c => (c.tipo||c.canal||'').toLowerCase()==='meta' && (c.status||'ativo')==='ativo');
+    const todas = (r.contas||[]).filter(c => (c.tipo||c.canal||'').toLowerCase()==='meta' && (c.status||'ativo')==='ativo');
+    contas = todas.filter(c => _isContaPermitidaDisparos(c.id || c.codigo, perm));
     const sel = qs('#fConta');
     if(!contas.length){
-      sel.innerHTML = '<option value="">— nenhuma conta Meta ativa —</option>';
-      toast('Nenhuma conta Meta oficial cadastrada. Vá em Contas primeiro.','warn');
+      const msg = todas.length
+        ? '— sem contas liberadas pra você —'
+        : '— nenhuma conta Meta ativa —';
+      sel.innerHTML = '<option value="">' + msg + '</option>';
+      if(todas.length){
+        toast('Você não tem acesso a nenhuma conta Meta. Fale com o SUPER.','warn');
+      } else {
+        toast('Nenhuma conta Meta oficial cadastrada. Vá em Contas primeiro.','warn');
+      }
       return;
     }
     sel.innerHTML = '<option value="">— selecione —</option>' +
@@ -623,8 +664,13 @@ async function disparar(){
 async function carregarCampanhas(){
   const tbody = qs('#tblCampanhas');
   try{
+    const perm = await getContasPermitidasDoUsuario();
     const r = await api(URL_LIST);
-    const camps = r.campanhas || [];
+    let camps = r.campanhas || [];
+    // Filtra campanhas por contas permitidas (SUPER vê tudo)
+    if(perm !== '__all__'){
+      camps = camps.filter(c => _isContaPermitidaDisparos(c.conta_id, perm));
+    }
     if(!camps.length){
       tbody.innerHTML = '<tr><td colspan="7" class="empty"><i class="bi bi-inbox"></i>Nenhuma campanha ainda.</td></tr>';
       return;

@@ -1,10 +1,18 @@
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
+<script>
+(function(){
+  var papel = String(localStorage.getItem('chat_papel')||'').toUpperCase();
+  var permitidos = ['SUPER','ADM','ADMIN'];
+  if(!permitidos.indexOf || permitidos.indexOf(papel) < 0){
+    try { document.documentElement.style.visibility='hidden'; } catch(_){}
+    alert('Voce nao tem permissao pra acessar essa pagina. Volte pelo chat.');
+    location.href = 'chat.html';
+  }
+})();
+</script>
 <meta charset="UTF-8">
-<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%237c3aed'/><text x='16' y='22' text-anchor='middle' fill='white' font-family='Arial,sans-serif' font-size='15' font-weight='bold'>UF</text></svg>">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script>try{if(window.top!==window.self)window.top.location.replace(window.location.href);}catch(e){}</script>
@@ -246,7 +254,7 @@ let templates = [];
 
 function qs(s){return document.querySelector(s)}
 function esc(s){return (s+'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-const LOGIN_URL = location.pathname.includes('/webhook/') ? '/webhook/chat-login' : location.pathname.replace(/[^/]+$/, '');
+const LOGIN_URL = location.pathname.includes('/webhook/') ? '/webhook/chat-login' : '/';
 function sair(){try{localStorage.removeItem('chat_token');localStorage.removeItem('chat_usuario')}catch(_){}location.href=LOGIN_URL}
 
 async function api(path, body){
@@ -421,6 +429,5 @@ window.onload=()=>{
   carregarContas();
 };
 </script>
-<script src="/version-check.js"></script>
 </body>
 </html>
