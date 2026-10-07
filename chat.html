@@ -5325,10 +5325,26 @@ function enviarPreviewIA(){
 }
 async function toggleIAConversa(ativar){
   if(!conversaAtiva){ toast('Selecione uma conversa primeiro','warn'); return; }
-  const label = ativar ? 'ATIVAR' : 'PAUSAR';
   const nome = conversaAtiva.nome || conversaAtiva.telefone;
-  if(!confirm(label + ' a IA nesta conversa com ' + nome + '?')) return;
+
+  // ATIVAR com preview carregado → oferece combo (ativar + enviar primeira resposta)
+  const temPreview = ativar && __IA_PREV_DADOS && __IA_PREV_DADOS.sugestao && String(__IA_PREV_DADOS.sugestao).trim().length > 0;
+  let enviarPrimeira = false;
+  if(temPreview){
+    enviarPrimeira = confirm(
+      'ATIVAR a IA nesta conversa com ' + nome + '?\n\n' +
+      '✓ Clique OK → Ativa IA + ENVIA essa primeira resposta agora\n' +
+      '✗ Cancelar → Não faz nada\n\n' +
+      '(Se quiser só ativar sem enviar essa msg, feche este diálogo e use o botão "Pausar" depois do envio)'
+    );
+    if(!enviarPrimeira) return;
+  } else {
+    const label = ativar ? 'ATIVAR' : 'PAUSAR';
+    if(!confirm(label + ' a IA nesta conversa com ' + nome + '?')) return;
+  }
+
   try {
+    // Passo 1: toggle on/off
     const payload = JSON.stringify({
       conta_id: conversaAtiva.conta_id,
       telefone: conversaAtiva.telefone,
@@ -5337,10 +5353,33 @@ async function toggleIAConversa(ativar){
     const r = await fetch(URL_IA_ATEND_TOGGLE, { method:'POST', headers:{'Content-Type':'text/plain;charset=UTF-8'}, body: payload });
     const txt = await r.text();
     let d; try { d = JSON.parse(txt); } catch(_){ d = { ok:false, erro:'Resposta inválida' }; }
-    if(d.ok){
-      toast('IA ' + (ativar?'ATIVADA':'PAUSADA') + ' nesta conversa ✓','');
-    } else {
+    if(!d.ok){
       toast('Erro: ' + (d.erro || 'servidor'), 'err');
+      return;
+    }
+
+    // Passo 2: se é combo, envia a primeira mensagem via /chat-ia-atendimento-executar
+    if(enviarPrimeira){
+      try {
+        const execBody = JSON.stringify({ ...__IA_PREV_DADOS, usuario: USUARIO || 'admin' });
+        const er = await fetch(BASE + '/chat-ia-atendimento-executar', { method:'POST', headers:{'Content-Type':'text/plain;charset=UTF-8'}, body: execBody });
+        const et = await er.text();
+        let ed; try { ed = JSON.parse(et); } catch(_){ ed = { ok:false }; }
+        if(ed.ok){
+          toast('IA ATIVADA ✓ + primeira resposta enviada 🤖','');
+          // Fecha o modal se tiver aberto
+          const modal = qs('#iaPrevModal');
+          if(modal) modal.style.display = 'none';
+          // Recarrega msgs pra mostrar a nova
+          if(typeof carregarMensagens === 'function') carregarMensagens();
+        } else {
+          toast('IA ATIVADA ✓ mas erro ao enviar msg: ' + (ed.erro||''), 'warn');
+        }
+      } catch(e){
+        toast('IA ATIVADA ✓ mas falhou envio da msg: ' + e.message, 'warn');
+      }
+    } else {
+      toast('IA ' + (ativar?'ATIVADA':'PAUSADA') + ' nesta conversa ✓','');
     }
   } catch(e){
     toast('Erro: ' + e.message, 'err');
