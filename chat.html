@@ -2627,7 +2627,11 @@ async function pollDelta(){
 
 async function carregarContadoresReais(){
   try{
-    const params = ['usuario=' + encodeURIComponent(USUARIO||'')];
+    const params = [
+      'usuario=' + encodeURIComponent(USUARIO||''),
+      'role=' + encodeURIComponent(USUARIO_PAPEL||'USER'),
+      'contas_permitidas=' + encodeURIComponent(CONTAS_PERMITIDAS || '__all__')
+    ];
     if(contaAtiva) params.push('conta_id=' + encodeURIComponent(contaAtiva.id));
     if(FILTRO_CONSULTOR) params.push('filtro_dono=' + encodeURIComponent(FILTRO_CONSULTOR));
     if(FILTRO_DATA_DE) params.push('data_de=' + encodeURIComponent(FILTRO_DATA_DE));
@@ -2935,9 +2939,12 @@ async function carregarAtendentes(){
       else if(raw.toLowerCase() === '__none__') CONTAS_PERMITIDAS = '__none__';
       else CONTAS_PERMITIDAS = raw; // CSV
     } else {
-      // Usuário não achado no cache: se ADM, libera tudo; senão, bloqueia
-      CONTAS_PERMITIDAS = (String(USUARIO_PAPEL||'').toUpperCase() === 'ADM') ? '__all__' : '__none__';
+      // Usuário não achado no cache: se SUPER, libera tudo; senão, bloqueia
+      const papel = String(USUARIO_PAPEL||'').toUpperCase();
+      CONTAS_PERMITIDAS = (papel === 'SUPER') ? '__all__' : '__none__';
     }
+    // SUPER sempre vê tudo, independente do contas_permitidas gravado
+    if(String(USUARIO_PAPEL||'').toUpperCase() === 'SUPER') CONTAS_PERMITIDAS = '__all__';
   } catch(_){ CONTAS_PERMITIDAS = '__all__'; }
   if(typeof popularFiltroConsultor === 'function') popularFiltroConsultor();
 }

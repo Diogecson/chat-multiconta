@@ -156,8 +156,9 @@ body{margin:0;background:var(--bg);font-family:'Inter',system-ui,sans-serif;colo
         <div class="form-row">
           <label class="form-label">Papel</label>
           <select class="form-select" id="fPapel">
-            <option value="USER">Consultor (USER)</option>
-            <option value="ADM">Admin (ADM)</option>
+            <option value="USER">Consultor (USER) — vê só as próprias conversas nas contas liberadas</option>
+            <option value="ADM">Admin da conta (ADM) — vê tudo das contas liberadas</option>
+            <option value="SUPER">Super Admin (SUPER) — vê TUDO, sem restrição de conta</option>
           </select>
         </div>
       </div>
@@ -463,7 +464,12 @@ async function editar(usuario){
   qs('#fUsuario').value = a.usuario; qs('#fUsuario').disabled = true;
   qs('#fNome').value = a.nome||'';
   qs('#fSenha').value = '';
-  qs('#fPapel').value = (a.role||'USER').toUpperCase()==='ADM' ? 'ADM' : 'USER';
+  qs('#fPapel').value = (function(){
+    const r = (a.role||'USER').toUpperCase();
+    if(r === 'SUPER') return 'SUPER';
+    if(r === 'ADM' || r === 'ADMIN') return 'ADM';
+    return 'USER';
+  })();
   qs('#fContas').value = a.contas_permitidas||'*';
   if(!_CONTAS_CACHE.length) await carregarContasPicker();
   renderContasPicker(a.contas_permitidas || '*');
