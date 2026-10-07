@@ -1765,7 +1765,9 @@ body,html{height:100%;margin:0;overflow:hidden;background:var(--bg);
 const BASE = "https://plano-acao-high-performace-n8n.szlqqi.easypanel.host/webhook";
 const URL_CONTAS      = BASE + "/chat-contas-list";
 const URL_CONVERSAS   = BASE + "/chat-conversas";
+const URL_CONVERSAS_DELTA = BASE + "/chat-conversas-delta";
 const URL_MENSAGENS   = BASE + "/chat-mensagens";
+const PAGE_SIZE_CONV  = 50;
 const URL_ENVIAR      = BASE + "/chat-enviar";
 const URL_RT_CRIAR    = BASE + "/chat-retorno-criar";
 const URL_RT_LIST     = BASE + "/chat-retorno-list";
@@ -1781,12 +1783,19 @@ let USUARIO = "";
 let USUARIO_NOME = "";
 let USUARIO_PAPEL = "consultor";  // 'admin' | 'consultor'
 let USUARIO_FOTO = "";
+// Contas Meta/Evolution que esse usuário pode ver.
+// '*' / '__all__' = tudo (ADM ou liberado); CSV "123,456" = só essas; vazio ou '__none__' = nada.
+let CONTAS_PERMITIDAS = '__all__';
 let contas = [];         // [{id,nome,tipo,status}]
 let contaAtiva = null;   // null = todas
-let conversas = [];      // [{id,conta_id,telefone,nome,ultima_msg,ultima_hora,nao_lidas,janela_expira}]
+let conversas = [];      // [{id,conta_id,telefone,nome,ultima_msg,ultima_hora,nao_lidas,janela_expira,dono,finalizada,motivo_*,etiquetas,em_triagem}]
 let conversaAtiva = null;// obj conversa
 let mensagens = [];
 let pollTimer = null;
+// Paginação da sidebar (scroll infinito, 50 em 50)
+let PAG_CONV = { offset: 0, has_more: true, carregando: false, total_filtrado: 0 };
+// Timestamp do último snapshot completo — usado pelo polling incremental (/chat-conversas-delta)
+let ULTIMO_DELTA_TS = null;
 
 // ===== Estado de notificação =====
 let ultimaHoraGeral = "";           // maior timestamp já visto em qualquer conversa
@@ -2433,10 +2442,26 @@ async function carregarContas(){
     renderRail();
   }catch(e){toast('Erro contas: '+e.message,'err')}
 }
+// true se a conta deve aparecer pro usuário atual
+function isContaPermitida(contaId){
+  const perm = String(CONTAS_PERMITIDAS||'__all__').trim();
+  if(!perm || perm === '__all__' || perm === '*') return true;
+  if(perm === '__none__') return false;
+  const ids = perm.split(',').map(s=>s.trim()).filter(Boolean);
+  return ids.includes(String(contaId));
+}
 function renderRail(){
   const el=qs('#acctList');
-  if(!contas.length){el.innerHTML='<div style="color:#fff8;font-size:.65rem;text-align:center;padding:8px 4px">Sem contas.<br>Cadastre em ⚙️</div>';return}
-  el.innerHTML=contas.map(c=>{
+  // Filtra contas pelo que o usuário pode ver (ADM/__all__ passa tudo)
+  const contasVisiveis = (contas||[]).filter(c => isContaPermitida(c.id));
+  if(!contasVisiveis.length){
+    const msg = (contas||[]).length
+      ? '<div style="color:#fff8;font-size:.65rem;text-align:center;padding:8px 4px">Sem contas liberadas pra você.<br>Fale com o ADM.</div>'
+      : '<div style="color:#fff8;font-size:.65rem;text-align:center;padding:8px 4px">Sem contas.<br>Cadastre em ⚙️</div>';
+    el.innerHTML = msg;
+    return;
+  }
+  el.innerHTML=contasVisiveis.map(c=>{
     const cls='acct-btn tipo-'+c.tipo+(contaAtiva&&contaAtiva.id===c.id?' active':'');
     const icone=c.tipo==='meta'?'<i class="bi bi-check-circle-fill"></i>':'<i class="bi bi-whatsapp"></i>';
     return `<button class="${cls}" title="${c.nome} (${c.tipo==='meta'?'Oficial':'Evolution'})" onclick="selecionarConta('${c.id}')">
@@ -2447,7 +2472,15 @@ function renderRail(){
 
 function selecionarConta(id){
   if(id===null){contaAtiva=null;qs('#btn-conta-todas').classList.add('active')}
-  else{contaAtiva=contas.find(c=>c.id===id)||null;qs('#btn-conta-todas').classList.remove('active')}
+  else{
+    // Trava de segurança: USER não pode selecionar conta não permitida
+    if(id && !isContaPermitida(id)){
+      toast('Você não tem acesso a essa conta', 'err');
+      return;
+    }
+    contaAtiva=contas.find(c=>c.id===id)||null;
+    qs('#btn-conta-todas').classList.remove('active');
+  }
   renderRail();
   qs('#sbTitulo').textContent=contaAtiva?contaAtiva.nome:'Todas as conversas';
   qs('#sbContaInfo').innerHTML= contaAtiva
@@ -2474,33 +2507,121 @@ function convCacheSet(arr){
   } catch(_){}
 }
 
-async function carregarConversas(){
-  // 1) Se tem cache válido, mostra imediato
-  const cache = convCacheGet();
-  if(cache && (!conversas || !conversas.length)){
-    conversas = cache.conversas;
-    conversas.sort((a,b)=>new Date(b.ultima_hora||0)-new Date(a.ultima_hora||0));
-    renderConversas();
+// Monta a querystring de filtros globais que vai ao servidor
+function _buildConversasQuery(extraOffset){
+  const q = [
+    'actor=' + encodeURIComponent(USUARIO||''),
+    'role='  + encodeURIComponent(USUARIO_PAPEL||'USER'),
+    'visao=' + encodeURIComponent(VISAO || '__all__'),
+    'contas_permitidas=' + encodeURIComponent(CONTAS_PERMITIDAS || '__all__'),
+    'limit=' + PAGE_SIZE_CONV,
+    'offset=' + (extraOffset|0)
+  ];
+  if(contaAtiva)                    q.push('conta_id='         + encodeURIComponent(contaAtiva.id));
+  if(FILTRO_DATA_DE)                q.push('data_de='          + encodeURIComponent(FILTRO_DATA_DE));
+  if(FILTRO_DATA_ATE)               q.push('data_ate='         + encodeURIComponent(FILTRO_DATA_ATE));
+  if(FILTRO_ETIQUETA)               q.push('etiqueta='         + encodeURIComponent(FILTRO_ETIQUETA));
+  if(FILTRO_CONSULTOR)              q.push('atendente_filtro=' + encodeURIComponent(FILTRO_CONSULTOR));
+  return q.join('&');
+}
+
+async function carregarConversas(reset){
+  if(reset === undefined) reset = true;
+  // Reset zera paginação e limpa array antes do fetch (mantém cache pra pintar rápido)
+  if(reset){
+    // Cache local só pra pintar instantâneo enquanto a primeira página não chega
+    const cache = convCacheGet();
+    if(cache && (!conversas || !conversas.length)){
+      conversas = cache.conversas;
+      conversas.sort((a,b)=>new Date(b.ultima_hora||0)-new Date(a.ultima_hora||0));
+      renderConversas();
+    }
+    PAG_CONV.offset = 0;
+    PAG_CONV.has_more = true;
+    PAG_CONV.total_filtrado = 0;
   }
+  if(PAG_CONV.carregando) return;
+  if(!reset && !PAG_CONV.has_more) return;
+  PAG_CONV.carregando = true;
   try{
-    let url = URL_CONVERSAS
-      + '?actor=' + encodeURIComponent(USUARIO||'')
-      + '&role='  + encodeURIComponent(USUARIO_PAPEL||'USER');
-    if(contaAtiva) url += '&conta_id=' + encodeURIComponent(contaAtiva.id);
-    const r=await api(url);
-    conversas=r.conversas||[];
+    const url = URL_CONVERSAS + '?' + _buildConversasQuery(PAG_CONV.offset);
+    const r = await api(url);
+    const novas = r.conversas || [];
+    if(reset){
+      conversas = novas.slice();
+    } else {
+      // Append: evita duplicar id já presente
+      const jaTem = new Set(conversas.map(c=>c.id));
+      for(const c of novas){ if(!jaTem.has(c.id)) conversas.push(c); }
+    }
     conversas.sort((a,b)=>new Date(b.ultima_hora||0)-new Date(a.ultima_hora||0));
-    // Salva cache pra próxima abertura ser instantânea
-    convCacheSet(conversas);
-    // Re-merge finalizadas cacheadas (senão polling esvazia matrículas/finalizadas)
-    if(typeof mergeFinalizadasEmConversas === 'function') mergeFinalizadasEmConversas();
-    // Re-merge busca profunda ativa (senão polling esvazia resultados)
-    if(typeof mergeBuscaProfundaEmConversas === 'function') mergeBuscaProfundaEmConversas();
-    carregarContadoresReais();
+    PAG_CONV.offset = (PAG_CONV.offset|0) + novas.length;
+    PAG_CONV.total_filtrado = parseInt(r.total_filtrado||0);
+    PAG_CONV.has_more = !!r.has_more;
+    ULTIMO_DELTA_TS = new Date().toISOString();
+    // Cache da primeira página (só pra abertura rápida na próxima sessão)
+    if(reset) convCacheSet(conversas.slice(0, PAGE_SIZE_CONV));
+    // Merges legacy (finalizadas cacheadas, busca profunda) só no reset
+    if(reset){
+      if(typeof mergeFinalizadasEmConversas === 'function') mergeFinalizadasEmConversas();
+      if(typeof mergeBuscaProfundaEmConversas === 'function') mergeBuscaProfundaEmConversas();
+      carregarContadoresReais();
+    }
     renderConversas();
   }catch(e){
-    // Se falhou mas tem cache, mantém o cache. Só mostra toast se não tinha nada.
     if(!conversas || !conversas.length) toast('Erro conversas: '+e.message,'err');
+  } finally {
+    PAG_CONV.carregando = false;
+  }
+}
+
+// Chamada pelo scroll infinito quando chega perto do fim da sidebar
+async function carregarMaisConversas(){
+  if(PAG_CONV.carregando || !PAG_CONV.has_more) return;
+  await carregarConversas(false);
+}
+
+// Polling incremental: só puxa o que mudou desde ULTIMO_DELTA_TS e mescla no array local.
+// Muito mais leve que recarregar tudo. Fallback: se algo falhar, cai pra carregarConversas(true).
+async function pollDelta(){
+  if(!ULTIMO_DELTA_TS){
+    // Ainda não teve carga inicial — faz uma carga full
+    await carregarConversas(true);
+    return;
+  }
+  try{
+    const q = [
+      'actor=' + encodeURIComponent(USUARIO||''),
+      'role='  + encodeURIComponent(USUARIO_PAPEL||'USER'),
+      'since=' + encodeURIComponent(ULTIMO_DELTA_TS),
+      'contas_permitidas=' + encodeURIComponent(CONTAS_PERMITIDAS || '__all__')
+    ];
+    if(contaAtiva) q.push('conta_id=' + encodeURIComponent(contaAtiva.id));
+    const url = URL_CONVERSAS_DELTA + '?' + q.join('&');
+    const r = await api(url);
+    const deltas = r.conversas || [];
+    if(deltas.length){
+      const idx = new Map(conversas.map((c,i)=>[c.id, i]));
+      for(const c of deltas){
+        const i = idx.get(c.id);
+        if(i !== undefined){
+          // Mescla campos, mantém `nao_lidas` local que o polling não sabe
+          const antigo = conversas[i];
+          conversas[i] = Object.assign({}, antigo, c, { nao_lidas: antigo.nao_lidas || 0 });
+        } else {
+          conversas.push(c);
+        }
+      }
+      conversas.sort((a,b)=>new Date(b.ultima_hora||0)-new Date(a.ultima_hora||0));
+      renderConversas();
+      carregarContadoresReais(); // atualiza badges se houve mudança
+    }
+    if(r.agora) ULTIMO_DELTA_TS = r.agora;
+    else ULTIMO_DELTA_TS = new Date().toISOString();
+  }catch(e){
+    // Falhou delta — fallback: full refresh (raro)
+    console.warn('pollDelta falhou, caindo pra full:', e.message);
+    await carregarConversas(true);
   }
 }
 
@@ -2569,11 +2690,12 @@ async function carregarConversasFinalizadas(){
 async function setVisao(v){
   VISAO = v;
   document.querySelectorAll('.sb-filtro').forEach(b => b.classList.toggle('active', b.getAttribute('data-visao') === v));
-  // Se abriu Matriculas ou Finalizadas, garante que temos o historico completo carregado
+  // Se abriu Matriculas ou Finalizadas, garante que temos o historico completo carregado (legacy — hoje o server já traz)
   if(v === 'matriculas' || v === 'finalizadas'){
     await carregarConversasFinalizadas();
   }
-  renderConversas(qs('#busca').value.toLowerCase().trim());
+  // Novo: mudar visão dispara reset + fetch da 1ª página com o filtro aplicado no server
+  await carregarConversas(true);
 }
 
 // Busca profunda no texto das mensagens (aciona ao apertar Enter no input de busca)
@@ -2633,7 +2755,7 @@ function setFiltroConsultor(usuario){
   const sel = qs('#fltConsultor');
   if(sel) sel.classList.toggle('active-filter', !!FILTRO_CONSULTOR);
   if(FILTRO_CONSULTOR && VISAO !== 'todas') setVisao('todas');
-  else renderConversas(qs('#busca').value.toLowerCase().trim());
+  else carregarConversas(true);
   atualizarTimers();
   carregarContadoresReais();
 }
@@ -2663,13 +2785,15 @@ function setFiltroEtiqueta(etiq){
   FILTRO_ETIQUETA = String(etiq||'').trim();
   const sel = qs('#fltEtiqueta');
   if(sel) sel.classList.toggle('active-filter', !!FILTRO_ETIQUETA);
+  // Etiqueta primária é enviada pro server (reset + fetch)
   if((FILTRO_ETIQUETA || FILTRO_ETIQUETA2) && VISAO !== 'todas') setVisao('todas');
-  else renderConversas(qs('#busca').value.toLowerCase().trim());
+  else carregarConversas(true);
 }
 function setFiltroEtiqueta2(etiq){
   FILTRO_ETIQUETA2 = String(etiq||'').trim();
   const sel = qs('#fltEtiqueta2');
   if(sel) sel.classList.toggle('active-filter', !!FILTRO_ETIQUETA2);
+  // 2ª etiqueta é AND client-side em cima da 1ª (server só filtra 1)
   if((FILTRO_ETIQUETA || FILTRO_ETIQUETA2) && VISAO !== 'todas') setVisao('todas');
   else renderConversas(qs('#busca').value.toLowerCase().trim());
 }
@@ -2682,7 +2806,7 @@ function setFiltroData(){
   const de = qs('#fltDataDe'); if(de) de.classList.toggle('active-filter', ativo);
   const ate = qs('#fltDataAte'); if(ate) ate.classList.toggle('active-filter', ativo);
   const bt = qs('#fltDataClear'); if(bt) bt.style.display = ativo ? '' : 'none';
-  renderConversas(qs('#busca').value.toLowerCase().trim());
+  carregarConversas(true);
   atualizarTimers();
   carregarContadoresReais();
 }
@@ -2801,6 +2925,20 @@ async function carregarAtendentes(){
     const r = await api(BASE + '/chat-atendentes-list');
     ATENDENTES_CACHE = (r && r.atendentes) || [];
   } catch(_){ ATENDENTES_CACHE = []; }
+  // Extrai contas_permitidas do usuário logado (default '__all__' pra ADM, '__none__' pra USER sem registro)
+  try {
+    const me = ATENDENTES_CACHE.find(a => String(a.usuario||'').toLowerCase() === String(USUARIO||'').toLowerCase());
+    if(me){
+      const raw = String(me.contas_permitidas || '').trim();
+      // '*' ou vazio em ADM = tudo; '*' em USER = tudo; CSV = específicas; __none__ = nada
+      if(!raw || raw === '*' || raw.toLowerCase() === '__all__') CONTAS_PERMITIDAS = '__all__';
+      else if(raw.toLowerCase() === '__none__') CONTAS_PERMITIDAS = '__none__';
+      else CONTAS_PERMITIDAS = raw; // CSV
+    } else {
+      // Usuário não achado no cache: se ADM, libera tudo; senão, bloqueia
+      CONTAS_PERMITIDAS = (String(USUARIO_PAPEL||'').toUpperCase() === 'ADM') ? '__all__' : '__none__';
+    }
+  } catch(_){ CONTAS_PERMITIDAS = '__all__'; }
   if(typeof popularFiltroConsultor === 'function') popularFiltroConsultor();
 }
 function atendenteInfo(usuario){
@@ -5462,7 +5600,8 @@ function sair(){
 }
 
 async function pollAtualizar(){
-  await carregarConversas();
+  // Usa delta incremental (só o que mudou) — muito mais leve que recarregar tudo
+  await pollDelta();
   // detectar mensagens novas comparando ultima_hora das conversas (só direção 'in')
   let novaEntrada = null;
   for(const c of conversas){
@@ -5600,6 +5739,21 @@ window.onload=async ()=>{
     if(!document.hidden) pollAtualizar(); // ao voltar, atualiza na hora
   });
   iniciarPolling();
+
+  // Scroll infinito na sidebar de conversas: quando chegar a ~200px do fim, puxa próxima página
+  const _convListEl = document.getElementById('convList');
+  if(_convListEl){
+    let _scrollBusy = false;
+    _convListEl.addEventListener('scroll', ()=>{
+      if(_scrollBusy) return;
+      if(!PAG_CONV.has_more || PAG_CONV.carregando) return;
+      const distFundo = _convListEl.scrollHeight - _convListEl.scrollTop - _convListEl.clientHeight;
+      if(distFundo < 200){
+        _scrollBusy = true;
+        carregarMaisConversas().finally(()=>{ setTimeout(()=>{ _scrollBusy = false; }, 200); });
+      }
+    }, { passive: true });
+  }
 };
 
 /* =========================================================

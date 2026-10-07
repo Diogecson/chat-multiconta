@@ -171,9 +171,13 @@ body{margin:0;background:var(--bg);font-family:'Inter',system-ui,sans-serif;colo
         <div class="form-hint">Deixe em branco pra manter a atual (em edição).</div>
       </div>
       <div class="form-row">
-        <label class="form-label">Contas permitidas</label>
-        <input class="form-input" id="fContas" value="*" placeholder="* pra todas, ou 'meta_XXX,evo_YYY'">
-        <div class="form-hint">Use <code>*</code> pra ver todas. Ou CSV de códigos de conta.</div>
+        <label class="form-label">Contas permitidas (chats que o consultor pode ver)</label>
+        <div id="fContasBox" style="border:2px solid var(--line);border-radius:8px;padding:10px;background:#fafbfc;max-height:220px;overflow-y:auto">
+          <div style="padding:8px 4px;color:#64748b;font-size:.85rem"><i class="bi bi-hourglass"></i> Carregando contas…</div>
+        </div>
+        <!-- Campo oculto só pra manter compatibilidade com código legacy -->
+        <input type="hidden" id="fContas" value="*">
+        <div class="form-hint">Marque as contas que esse consultor pode acessar. "Todas" libera inclusive novas contas futuras. Nenhuma marcada = sem acesso (pra usuários desativados).</div>
       </div>
       <div style="display:flex;align-items:center;gap:8px">
         <input type="checkbox" id="fAtivo" checked>
@@ -274,7 +278,7 @@ body{margin:0;background:var(--bg);font-family:'Inter',system-ui,sans-serif;colo
 
 <script>
 const BASE = location.pathname.includes('/webhook/') ? location.origin + '/webhook' : 'https://plano-acao-high-performace-n8n.szlqqi.easypanel.host/webhook';
-const LOGIN_URL = location.pathname.includes('/webhook/') ? '/webhook/chat-login' : location.pathname.replace(/[^/]+$/, '');
+const LOGIN_URL = location.pathname.includes('/webhook/') ? '/webhook/chat-login' : '/';
 let TOKEN='', USUARIO='', PAPEL='', ATENDENTES=[];
 let editando = null;
 
@@ -302,12 +306,29 @@ async function api(path, body){
 
 async function carregar(){
   try {
+    // Carrega contas junto (pro picker + pra formatarContasPermitidas na listagem)
+    if(!_CONTAS_CACHE.length){ await carregarContasPicker(); }
     const r = await api('/chat-atendentes-list');
     ATENDENTES = r.atendentes || [];
     render();
   } catch(e){
     qs('#tblWrap').innerHTML = '<div class="empty" style="color:var(--err)">Erro: '+esc(e.message)+'</div>';
   }
+}
+
+// Mostra "Todas", "Nenhuma" ou os nomes das contas liberadas na tabela
+function formatarContasPermitidas(csv){
+  const v = String(csv || '*').trim();
+  if(!v || v === '*' || v.toLowerCase() === '__all__')
+    return '<span class="pill" style="background:#dcfce7;color:#166534">Todas</span>';
+  if(v.toLowerCase() === '__none__')
+    return '<span class="pill" style="background:#fee2e2;color:#991b1b">Nenhuma</span>';
+  const ids = v.split(',').map(s=>s.trim()).filter(Boolean);
+  const nomes = ids.map(id => {
+    const c = _CONTAS_CACHE.find(x => String(x.id) === id);
+    return c ? (c.nome || id) : id;
+  });
+  return '<span style="font-size:.78rem">'+nomes.map(esc).join(', ')+'</span>';
 }
 
 function render(){
@@ -328,7 +349,7 @@ function render(){
       + '<td><span class="pill '+(a.role==='ADM'?'admin':'consultor')+'"><i class="bi bi-'+(a.role==='ADM'?'shield-fill-check':'person-fill')+'"></i>'+esc(a.role||'USER')+'</span></td>'
       + '<td><span class="pill '+at+'">'+at+'</span></td>'
       + '<td style="text-align:center">'+filaBtn+'</td>'
-      + '<td><code style="font-size:.75rem">'+esc(a.contas_permitidas||'*')+'</code></td>'
+      + '<td>'+formatarContasPermitidas(a.contas_permitidas)+'</td>'
       + '<td style="text-align:right;white-space:nowrap">'
       +   '<button class="btn btn-secondary btn-sm" onclick="editar(\''+esc(a.usuario)+'\')"><i class="bi bi-pencil"></i></button> '
       +   (a.usuario!=='admin' ? '<button class="btn btn-danger btn-sm" onclick="deletar(\''+esc(a.usuario)+'\')"><i class="bi bi-trash"></i></button>' : '')
@@ -352,7 +373,66 @@ async function toggleFila(usuario, valor){
   }catch(e){ toast('Erro: '+e.message, 'err'); carregar(); }
 }
 
-function abrirNovo(){
+// Lista de contas (meta/evolution) carregada 1x pro picker — ADM precisa ver pra marcar/desmarcar
+let _CONTAS_CACHE = [];
+async function carregarContasPicker(){
+  try {
+    const r = await api('/chat-contas-list');
+    _CONTAS_CACHE = (r && r.contas) || [];
+  } catch(_){ _CONTAS_CACHE = []; }
+}
+function renderContasPicker(csvAtual){
+  const box = qs('#fContasBox');
+  if(!box) return;
+  const perm = String(csvAtual || '*').trim();
+  const isTodas = (!perm || perm === '*' || perm.toLowerCase() === '__all__');
+  const ids = isTodas ? new Set() : new Set(perm.split(',').map(s=>s.trim()).filter(Boolean));
+  if(!_CONTAS_CACHE.length){
+    box.innerHTML = '<div style="color:#64748b;font-size:.85rem;padding:4px">Nenhuma conta cadastrada. Cadastre em Contas → voltar aqui.</div>';
+    return;
+  }
+  let html = '';
+  html += '<label style="display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid var(--line);margin-bottom:6px;font-weight:700">'
+       + '<input type="checkbox" id="fContasAll" '+(isTodas?'checked':'')+'> '
+       + '<span>Todas as contas (inclusive novas futuras)</span>'
+       + '</label>';
+  html += _CONTAS_CACHE.map(c => {
+    const checked = isTodas || ids.has(String(c.id));
+    const tipoLbl = c.tipo === 'meta' ? 'Oficial' : 'Evolution';
+    return '<label style="display:flex;align-items:center;gap:8px;padding:4px;font-size:.88rem">'
+         + '<input type="checkbox" class="fContaItem" value="'+esc(c.id)+'" '+(checked?'checked':'')+' '+(isTodas?'disabled':'')+'> '
+         + '<span style="font-weight:600">'+esc(c.nome||c.id)+'</span>'
+         + ' <span style="color:#64748b;font-size:.75rem">('+tipoLbl+')</span>'
+         + '</label>';
+  }).join('');
+  box.innerHTML = html;
+  // Toggle Todas liga/desliga individuais
+  const chkAll = qs('#fContasAll');
+  if(chkAll){
+    chkAll.addEventListener('change', () => {
+      const marcado = chkAll.checked;
+      document.querySelectorAll('.fContaItem').forEach(cb => {
+        cb.disabled = marcado;
+        if(marcado) cb.checked = true;
+      });
+      _sincContasHidden();
+    });
+  }
+  document.querySelectorAll('.fContaItem').forEach(cb => {
+    cb.addEventListener('change', _sincContasHidden);
+  });
+  _sincContasHidden();
+}
+function _sincContasHidden(){
+  const chkAll = qs('#fContasAll');
+  const campo = qs('#fContas');
+  if(!campo) return;
+  if(chkAll && chkAll.checked){ campo.value = '*'; return; }
+  const marcados = Array.from(document.querySelectorAll('.fContaItem:checked')).map(cb => cb.value);
+  campo.value = marcados.length ? marcados.join(',') : '__none__';
+}
+
+async function abrirNovo(){
   editando = null;
   qs('#modalTitulo').innerHTML = '<i class="bi bi-person-plus-fill"></i> Novo atendente';
   qs('#senhaHint').textContent = '(obrigatório em novos)';
@@ -360,7 +440,9 @@ function abrirNovo(){
   qs('#fNome').value = '';
   qs('#fSenha').value = '';
   qs('#fPapel').value = 'USER';
-  qs('#fContas').value = '*';
+  qs('#fContas').value = '__none__';  // novo cadastro começa SEM acesso — ADM libera manualmente
+  if(!_CONTAS_CACHE.length) await carregarContasPicker();
+  renderContasPicker('__none__');
   qs('#fAtivo').checked = true;
   fotoAtual = '';
   qs('#fFoto').value = '';
@@ -372,7 +454,7 @@ function abrirNovo(){
   setTimeout(()=>qs('#fUsuario').focus(), 100);
 }
 
-function editar(usuario){
+async function editar(usuario){
   const a = ATENDENTES.find(x=>x.usuario===usuario);
   if(!a) return;
   editando = a;
@@ -383,6 +465,8 @@ function editar(usuario){
   qs('#fSenha').value = '';
   qs('#fPapel').value = (a.role||'USER').toUpperCase()==='ADM' ? 'ADM' : 'USER';
   qs('#fContas').value = a.contas_permitidas||'*';
+  if(!_CONTAS_CACHE.length) await carregarContasPicker();
+  renderContasPicker(a.contas_permitidas || '*');
   qs('#fAtivo').checked = a.ativo !== false;
   fotoAtual = a.foto_url||'';
   // Se for URL, coloca no campo alternativo. Se for data:base64, mantém só no fotoAtual + preview.
@@ -546,7 +630,11 @@ async function salvar(){
     role: qs('#fPapel').value,
     papel: qs('#fPapel').value,
     foto_url: fotoAtual,
-    contas_permitidas: qs('#fContas').value.trim() || '*',
+    contas_permitidas: (function(){
+      const v = qs('#fContas').value.trim();
+      // vazio -> __none__ (sem acesso); senão o valor (* ou CSV ou __none__)
+      return v || '__none__';
+    })(),
     ativo: qs('#fAtivo').checked,
     _editando: !!editando
   };
