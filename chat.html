@@ -5343,16 +5343,25 @@ async function toggleIAConversa(ativar){
   const nome = conversaAtiva.nome || conversaAtiva.telefone;
 
   // ATIVAR com preview carregado → oferece combo (ativar + enviar primeira resposta)
-  const temPreview = ativar && __IA_PREV_DADOS && (__IA_PREV_DADOS.mensagem || __IA_PREV_DADOS.sugestao) && String(__IA_PREV_DADOS.mensagem || __IA_PREV_DADOS.sugestao).trim().length > 0;
+  const msgPreview = __IA_PREV_DADOS ? String(__IA_PREV_DADOS.mensagem || __IA_PREV_DADOS.sugestao || '').trim() : '';
+  const temPreview = ativar && msgPreview.length > 0;
+  console.log('[toggleIA] ativar=', ativar, 'temPreview=', temPreview, 'msgLen=', msgPreview.length, '__IA_PREV_DADOS=', __IA_PREV_DADOS);
   let enviarPrimeira = false;
   if(temPreview){
-    enviarPrimeira = confirm(
+    // 3 opções: Ativar + Enviar (OK), Só ativar sem enviar (prompt customizado), Cancelar
+    const escolha = window.prompt(
       'ATIVAR a IA nesta conversa com ' + nome + '?\n\n' +
-      '✓ Clique OK → Ativa IA + ENVIA essa primeira resposta agora\n' +
-      '✗ Cancelar → Não faz nada\n\n' +
-      '(Se quiser só ativar sem enviar essa msg, feche este diálogo e use o botão "Pausar" depois do envio)'
+      '• Digite ENVIAR → Ativa IA + ENVIA essa primeira resposta agora\n' +
+      '• Digite SO → Só ativa a IA (não envia nada agora)\n' +
+      '• Cancelar → Não faz nada\n\n' +
+      'Preview da msg: "' + msgPreview.substring(0,80) + (msgPreview.length>80?'...':'') + '"',
+      'ENVIAR'
     );
-    if(!enviarPrimeira) return;
+    if(escolha === null) return;
+    const op = String(escolha||'').trim().toUpperCase();
+    if(op === 'ENVIAR'){ enviarPrimeira = true; }
+    else if(op === 'SO' || op === 'SÓ'){ enviarPrimeira = false; }
+    else { toast('Opção inválida. Use ENVIAR ou SO.','warn'); return; }
   } else {
     const label = ativar ? 'ATIVAR' : 'PAUSAR';
     if(!confirm(label + ' a IA nesta conversa com ' + nome + '?')) return;
