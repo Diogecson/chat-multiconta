@@ -803,8 +803,12 @@ let ETIQ_EXISTENTES = [];       // {etiqueta, total} do banco
 
 async function carregarEtiquetasDatalist(conta_id){
   try{
-    // Se não passou conta_id, tenta pegar do form (fConta); default __all__
-    const cId = conta_id || (qs('#fConta')||{}).value || '__all__';
+    // Prioridade: conta_id passado → conta do form → contas permitidas do usuário
+    let cId = conta_id || (qs('#fConta')||{}).value || '';
+    if(!cId){
+      // Nenhuma conta escolhida: usa contas permitidas (pode ser CSV, __all__ ou __none__)
+      cId = await getContasPermitidasDoUsuario();
+    }
     const url = URL_BASE + '/webhook/chat-etiquetas-list?conta_id=' + encodeURIComponent(cId);
     const r = await fetch(url);
     const j = await r.json();
