@@ -4,7 +4,7 @@
 <script>
 (function(){
   var papel = String(localStorage.getItem('chat_papel')||'').toUpperCase();
-  var permitidos = ['SUPER'];
+  var permitidos = ['SUPER','ADM','ADMIN'];
   if(!permitidos.indexOf || permitidos.indexOf(papel) < 0){
     try { document.documentElement.style.visibility='hidden'; } catch(_){}
     alert('Voce nao tem permissao pra acessar essa pagina. Volte pelo chat.');
@@ -316,16 +316,58 @@ async function api(path, body){
   return await r.json();
 }
 
+// Papel do usuário logado e suas contas permitidas (cache)
+let _MEU_PAPEL = String(localStorage.getItem('chat_papel')||'').toUpperCase();
+let _MINHAS_CONTAS_PERM = '__all__';
+
 async function carregar(){
   try {
     // Carrega contas junto (pro picker + pra formatarContasPermitidas na listagem)
     if(!_CONTAS_CACHE.length){ await carregarContasPicker(); }
     const r = await api('/chat-atendentes-list');
-    ATENDENTES = r.atendentes || [];
+    let lista = r.atendentes || [];
+    // Pega as minhas contas permitidas (cache local)
+    const me = lista.find(a => String(a.usuario||'').toLowerCase() === String(USUARIO||'').toLowerCase());
+    if(me){
+      const raw = String(me.contas_permitidas||'').trim();
+      if(!raw || raw === '*' || raw.toLowerCase() === '__all__') _MINHAS_CONTAS_PERM = '__all__';
+      else if(raw.toLowerCase() === '__none__') _MINHAS_CONTAS_PERM = '__none__';
+      else _MINHAS_CONTAS_PERM = raw;
+    }
+    // ADM (não SUPER): filtra lista pra mostrar só usuários que compartilham ao menos 1 conta
+    if(_MEU_PAPEL === 'ADM' || _MEU_PAPEL === 'ADMIN'){
+      lista = _filtrarAtendentesPorConta(lista, _MINHAS_CONTAS_PERM);
+      // Esconde opção SUPER do form (ADM não cria/promove SUPER)
+      const optSuper = document.querySelector('#fPapel option[value="SUPER"]');
+      if(optSuper) optSuper.style.display = 'none';
+      // Esconde contas que o ADM não tem no picker
+      _CONTAS_CACHE = _CONTAS_CACHE.filter(c => _contaEstaNasMinhas(String(c.id), _MINHAS_CONTAS_PERM));
+    }
+    ATENDENTES = lista;
     render();
   } catch(e){
     qs('#tblWrap').innerHTML = '<div class="empty" style="color:var(--err)">Erro: '+esc(e.message)+'</div>';
   }
+}
+
+function _contaEstaNasMinhas(contaId, perm){
+  if(perm === '__all__' || perm === '*') return true;
+  if(!perm || perm === '__none__') return false;
+  return perm.split(',').map(s=>s.trim()).includes(String(contaId));
+}
+
+function _filtrarAtendentesPorConta(lista, minhaPerm){
+  if(minhaPerm === '__all__') return lista;
+  if(minhaPerm === '__none__') return [];
+  const minhasContas = new Set(minhaPerm.split(',').map(s=>s.trim()).filter(Boolean));
+  return lista.filter(a => {
+    // SUPER sempre fica oculto na visão de ADM (hierarquia)
+    if(String(a.role||'').toUpperCase() === 'SUPER') return false;
+    const p = String(a.contas_permitidas||'*').trim();
+    if(!p || p === '*' || p.toLowerCase() === '__all__') return true;
+    if(p.toLowerCase() === '__none__') return false;
+    return p.split(',').map(s=>s.trim()).some(c => minhasContas.has(c));
+  });
 }
 
 // Mostra "Todas", "Nenhuma" ou os nomes das contas liberadas na tabela
