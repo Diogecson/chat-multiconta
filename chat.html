@@ -1084,6 +1084,11 @@ body,html{height:100%;margin:0;overflow:hidden;background:var(--bg);
         <span class="lbl">Matrículas</span>
         <span class="fbadge" id="fbMatriculas">0</span>
       </button>
+      <button class="sb-filtro" data-visao="ia_ativa" onclick="setVisao('ia_ativa')" title="Conversas com IA Atendimento (Feroz) ativa agora">
+        <i class="bi bi-robot" style="color:#10b981"></i>
+        <span class="lbl">IA ativa</span>
+        <span class="fbadge" id="fbIaAtiva" style="background:#dcfce7;color:#065f46">0</span>
+      </button>
       <button class="sb-filtro" data-visao="expiradas" onclick="setVisao('expiradas')" title="Conversas Meta com janela 24h expirada — precisam template pra reengajar">
         <i class="bi bi-clock-history"></i>
         <span class="lbl">24h expirada</span>
@@ -2898,6 +2903,7 @@ function conversaMatchVisao(c){
   const finalizada = !!c.finalizada;
   const emTriagem = (typeof triagemDaConversa==='function') ? !!triagemDaConversa(c.conta_id, c.telefone) : false;
   if(VISAO === 'matriculas') return conversaEhMatricula(c);
+  if(VISAO === 'ia_ativa') return !finalizada && !!c.ia_ativa;
   if(VISAO === 'finalizadas') return finalizada;
   if(VISAO === 'atendimentos') return !finalizada && conversaTemDonoHumano(c);
   if(VISAO === 'triagem') return emTriagem && !finalizada;
@@ -3688,6 +3694,7 @@ function renderConversas(filtro){
     const fbTri     = qs('#fbTriagem'); if(fbTri)     fbTri.textContent     = c.triagem||0;
     const fbFin     = qs('#fbFinalizadas'); if(fbFin) fbFin.textContent     = c.finalizadas||0;
     const fbMat     = qs('#fbMatriculas'); if(fbMat)  fbMat.textContent     = c.matriculas||0;
+    const fbIa      = qs('#fbIaAtiva'); if(fbIa)      fbIa.textContent      = c.ia_ativa||0;
     // Aguardando = fallback local (backend ainda nao envia)
     const contAgu = conversas.filter(conversaAguardandoConsultor).length;
     const fbAgu   = qs('#fbAguardando'); if(fbAgu) fbAgu.textContent = contAgu;
@@ -3711,6 +3718,8 @@ function renderConversas(filtro){
     const fbTri     = qs('#fbTriagem'); if(fbTri)     fbTri.textContent     = contTri;
     const fbFin     = qs('#fbFinalizadas'); if(fbFin) fbFin.textContent     = contFinal;
     const fbMat     = qs('#fbMatriculas'); if(fbMat)  fbMat.textContent     = contMat;
+    const contIa    = conversas.filter(x => !x.finalizada && x.ia_ativa).length;
+    const fbIa      = qs('#fbIaAtiva'); if(fbIa) fbIa.textContent = contIa;
     const contAgu   = conversas.filter(conversaAguardandoConsultor).length;
     const fbAgu     = qs('#fbAguardando'); if(fbAgu) fbAgu.textContent = contAgu;
     const contExp   = conversas.filter(x => !x.finalizada && conversaJanela24hExpirada(x)).length;
