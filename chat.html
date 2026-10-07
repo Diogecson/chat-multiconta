@@ -4663,11 +4663,9 @@ async function iniciarGravacao(){
     recStream = await navigator.mediaDevices.getUserMedia({audio:{channelCount:1, sampleRate:48000, echoCancellation:true, noiseSuppression:true}});
   }catch(e){toast('Permissão de microfone negada','err');return}
 
-  // Meta aceita: audio/mp4 (aac), audio/ogg (opus), audio/mpeg, audio/aac, audio/amr
-  // Evolution aceita webm-opus (converte internamente). Pra Meta preferimos mp4/ogg.
-  const preferenciasMeta = ['audio/mp4;codecs=mp4a.40.2','audio/mp4','audio/ogg;codecs=opus','audio/webm;codecs=opus','audio/webm'];
-  const preferenciasEvo  = ['audio/webm;codecs=opus','audio/ogg;codecs=opus','audio/webm','audio/mp4'];
-  const preferencias = tipoConta==='meta' ? preferenciasMeta : preferenciasEvo;
+  // IMPORTANTE: webm/opus SEMPRE primeiro — universal, ffmpeg lê bem, qualquer transcriber (Whisper/Groq) aceita.
+  // MP4 do Chrome é fragmentado e quebra ffprobe/Whisper (nb_streams=0). O workflow de envio converte webm→ogg pra Meta.
+  const preferencias = ['audio/webm;codecs=opus','audio/ogg;codecs=opus','audio/webm','audio/mp4;codecs=mp4a.40.2','audio/mp4'];
   let mime = '';
   for(const t of preferencias){ if(MediaRecorder.isTypeSupported(t)){ mime=t; break; } }
   try{ mediaRecorder = new MediaRecorder(recStream, mime?{mimeType:mime}:undefined); }
