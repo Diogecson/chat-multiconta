@@ -5486,32 +5486,53 @@ async function pedirAjudaIA(){
 }
 
 function renderSugestaoIA(raw){
-  const texto = (raw||'').toString().trim();
+  let texto = (raw||'').toString().trim();
   if(!texto){ qs('#iaBody').innerHTML = '<div class="ia-erro">IA não gerou sugestão</div>'; return; }
-  // Parse do formato: SITUAÇÃO: / PRÓXIMA MENSAGEM SUGERIDA: / DICAS: / [VALIDAR COM SUPERVISOR]
-  const reSit  = /SITUAÇÃO\s*:\s*([\s\S]*?)(?=\nPR[ÓO]XIMA MENSAGEM SUGERIDA\s*:|$)/i;
-  const reMsg  = /PR[ÓO]XIMA MENSAGEM SUGERIDA\s*:\s*([\s\S]*?)(?=\nDICAS\s*:|$)/i;
-  const reDcs  = /DICAS\s*:\s*([\s\S]*?)(?=\[VALIDAR COM SUPERVISOR\]|$)/i;
+
+  // Normaliza: remove separadores visuais (==== / ---- / ****) e strip markdown bold **..**
+  texto = texto
+    .replace(/^[\s]*[=\-*_]{3,}[\s]*$/gm, '')  // linhas só de separador
+    .replace(/\*\*([^*]+)\*\*/g, '$1')         // remove bold markdown
+    .replace(/\n{3,}/g, '\n\n')                // colapsa linhas em branco
+    .trim();
+
+  // Aceita SITUAÇÃO, DIAGNÓSTICO ou DIAGNOSTICO (com/sem acento)
+  const reSit  = /(?:SITUA[ÇC][ÃA]O|DIAGN[ÓO]STICO)\s*:\s*([\s\S]*?)(?=\nPR[ÓO]XIMA MENSAGEM SUGERIDA\s*:|$)/i;
+  const reMsg  = /PR[ÓO]XIMA MENSAGEM SUGERIDA\s*:\s*([\s\S]*?)(?=\n\s*DICAS\s*:|\n\s*⚠️?\s*ALERTA\s*:|\n\s*\[VALIDAR COM SUPERVISOR\]|$)/i;
+  const reDcs  = /DICAS\s*:\s*([\s\S]*?)(?=\n\s*⚠️?\s*ALERTA\s*:|\n\s*\[VALIDAR COM SUPERVISOR\]|$)/i;
+  const reAlr  = /⚠️?\s*ALERTA\s*:\s*([\s\S]*?)(?=\n\s*\[VALIDAR COM SUPERVISOR\]|$)/i;
   const reVal  = /\[VALIDAR COM SUPERVISOR\]/i;
+
   const situacao = (texto.match(reSit)||[])[1]?.trim() || '';
-  const sugestao = (texto.match(reMsg)||[])[1]?.trim() || '';
+  let sugestao   = (texto.match(reMsg)||[])[1]?.trim() || '';
   const dicasRaw = (texto.match(reDcs)||[])[1]?.trim() || '';
-  const validar = reVal.test(texto);
+  const alertaRaw = (texto.match(reAlr)||[])[1]?.trim() || '';
+  const validar  = reVal.test(texto);
+
+  // Limpa restos de separador na sugestão (==== que ficou colado)
+  sugestao = sugestao.replace(/^[\s]*[=\-]{3,}[\s]*$/gm,'').trim();
+
   iaSugestaoAtual = sugestao;
-  const dicasHtml = dicasRaw ? '<ol>' + dicasRaw.split(/\n/).map(l=>l.trim()).filter(Boolean).map(l=>l.replace(/^\d+\.\s*/,'')).map(l=>'<li>'+escapeHtml(l)+'</li>').join('') + '</ol>' : '';
+
+  const dicasHtml = dicasRaw
+    ? '<ol>' + dicasRaw.split(/\n/).map(l=>l.trim()).filter(Boolean).map(l=>l.replace(/^\d+[\.\)]\s*/,'')).map(l=>'<li>'+escapeHtml(l)+'</li>').join('') + '</ol>'
+    : '';
+
   let html = '';
   if(situacao){
-    html += `<div class="ia-sec"><div class="ia-sec-title"><i class="bi bi-lightbulb-fill"></i> Situação</div><div class="ia-situacao">${escapeHtml(situacao)}</div></div>`;
+    html += `<div class="ia-sec"><div class="ia-sec-title"><i class="bi bi-lightbulb-fill"></i> Diagnóstico</div><div class="ia-situacao">${escapeHtml(situacao)}</div></div>`;
   }
   if(sugestao){
     html += `<div class="ia-sec"><div class="ia-sec-title"><i class="bi bi-chat-dots-fill" style="color:var(--wa-green-700)"></i> Próxima mensagem sugerida</div><div class="ia-sugestao">${escapeHtml(sugestao)}</div></div>`;
   } else {
-    // Sem parse: mostra texto bruto
     html += `<div class="ia-sec"><div class="ia-sec-title"><i class="bi bi-chat-dots-fill"></i> Sugestão</div><div class="ia-sugestao">${escapeHtml(texto)}</div></div>`;
     iaSugestaoAtual = texto;
   }
   if(dicasHtml){
     html += `<div class="ia-sec"><div class="ia-sec-title"><i class="bi bi-check2-circle"></i> Dicas</div><div class="ia-dicas">${dicasHtml}</div></div>`;
+  }
+  if(alertaRaw){
+    html += `<div class="ia-alerta"><i class="bi bi-exclamation-triangle-fill"></i> ${escapeHtml(alertaRaw)}</div>`;
   }
   if(validar){
     html += `<div class="ia-alerta"><i class="bi bi-shield-exclamation"></i> Validar com supervisor antes de fechar (desconto acima de 30%)</div>`;
