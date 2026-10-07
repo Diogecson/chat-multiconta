@@ -1585,6 +1585,7 @@ body,html{height:100%;margin:0;overflow:hidden;background:var(--bg);
     </div>
     <div style="border-top:1px dashed #cbd5e1;margin-top:14px;padding-top:12px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
       <button onclick="toggleIAConversa(true)" style="padding:7px 14px;border:1.5px solid #10b981;background:#f0fdf4;color:#065f46;border-radius:8px;font-size:.78rem;font-weight:700;cursor:pointer"><i class="bi bi-play-fill"></i> Ativar IA aqui</button>
+      <button id="iaPrevBtnAtivarEnviar" onclick="ativarIAEEnviar()" style="display:none;padding:7px 14px;border:none;background:linear-gradient(135deg,#f59e0b,#ea580c);color:#fff;border-radius:8px;font-size:.78rem;font-weight:700;cursor:pointer"><i class="bi bi-lightning-charge-fill"></i> Ativar + Enviar</button>
       <button onclick="toggleIAConversa(false)" style="padding:7px 14px;border:1.5px solid #64748b;background:#f8fafc;color:#334155;border-radius:8px;font-size:.78rem;font-weight:700;cursor:pointer"><i class="bi bi-pause-fill"></i> Pausar IA aqui</button>
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap">
@@ -5321,6 +5322,11 @@ async function previewIAAtendimento(){
       const labels = { sem_interesse:'⚡ Executar (Sem Interesse)', escalar_humano:'⚡ Executar (Escalar Humano)', escalar_consultor:'⚡ Executar (Escalar '+ (consultor||'consultor') +')', responder:'⚡ Executar (Enviar msg)' };
       btnExec.innerHTML = '<i class="bi bi-lightning-fill"></i> ' + (labels[acao] || labels.responder);
     }
+    // Botão "Ativar + Enviar": só faz sentido quando a ação é 'responder' e tem msg
+    const btnAE = qs('#iaPrevBtnAtivarEnviar');
+    if(btnAE){
+      btnAE.style.display = (acao === 'responder' && resposta && resposta.trim().length > 0) ? 'inline-flex' : 'none';
+    }
   } catch(e){
     if(body) body.textContent = 'Erro: ' + e.message;
   } finally {
@@ -5342,33 +5348,9 @@ async function toggleIAConversa(ativar){
   if(!conversaAtiva){ toast('Selecione uma conversa primeiro','warn'); return; }
   const nome = conversaAtiva.nome || conversaAtiva.telefone;
 
-  // ATIVAR com preview carregado → oferece combo (ativar + enviar primeira resposta)
-  const msgPreview = __IA_PREV_DADOS ? String(__IA_PREV_DADOS.mensagem || __IA_PREV_DADOS.sugestao || '').trim() : '';
-  const temPreview = ativar && msgPreview.length > 0;
-  console.log('[toggleIA] ativar=', ativar, 'temPreview=', temPreview, 'msgLen=', msgPreview.length, '__IA_PREV_DADOS=', __IA_PREV_DADOS);
-  let enviarPrimeira = false;
-  if(temPreview){
-    // 3 opções: Ativar + Enviar (OK), Só ativar sem enviar (prompt customizado), Cancelar
-    const escolha = window.prompt(
-      'ATIVAR a IA nesta conversa com ' + nome + '?\n\n' +
-      '• Digite ENVIAR → Ativa IA + ENVIA essa primeira resposta agora\n' +
-      '• Digite SO → Só ativa a IA (não envia nada agora)\n' +
-      '• Cancelar → Não faz nada\n\n' +
-      'Preview da msg: "' + msgPreview.substring(0,80) + (msgPreview.length>80?'...':'') + '"',
-      'ENVIAR'
-    );
-    if(escolha === null) return;
-    const op = String(escolha||'').trim().toUpperCase();
-    if(op === 'ENVIAR'){ enviarPrimeira = true; }
-    else if(op === 'SO' || op === 'SÓ'){ enviarPrimeira = false; }
-    else { toast('Opção inválida. Use ENVIAR ou SO.','warn'); return; }
-  } else {
-    const label = ativar ? 'ATIVAR' : 'PAUSAR';
-    if(!confirm(label + ' a IA nesta conversa com ' + nome + '?')) return;
-  }
-
+  const label = ativar ? 'ATIVAR' : 'PAUSAR';
+  if(!confirm(label + ' a IA nesta conversa com ' + nome + '?')) return;
   try {
-    // Passo 1: toggle on/off
     const payload = JSON.stringify({
       conta_id: conversaAtiva.conta_id,
       telefone: conversaAtiva.telefone,
@@ -5377,36 +5359,49 @@ async function toggleIAConversa(ativar){
     const r = await fetch(URL_IA_ATEND_TOGGLE, { method:'POST', headers:{'Content-Type':'text/plain;charset=UTF-8'}, body: payload });
     const txt = await r.text();
     let d; try { d = JSON.parse(txt); } catch(_){ d = { ok:false, erro:'Resposta inválida' }; }
-    if(!d.ok){
-      toast('Erro: ' + (d.erro || 'servidor'), 'err');
-      return;
-    }
+    if(!d.ok){ toast('Erro: ' + (d.erro || 'servidor'), 'err'); return; }
+    toast('IA ' + (ativar?'ATIVADA':'PAUSADA') + ' nesta conversa ✓','');
+  } catch(e){
+    toast('Erro: ' + e.message, 'err');
+  }
+}
 
-    // Passo 2: se é combo, envia a primeira mensagem via /chat-ia-atendimento-executar
-    if(enviarPrimeira){
-      try {
-        const execBody = JSON.stringify({ ...__IA_PREV_DADOS, usuario: USUARIO || 'admin' });
-        const er = await fetch(BASE + '/chat-ia-atendimento-executar', { method:'POST', headers:{'Content-Type':'text/plain;charset=UTF-8'}, body: execBody });
-        const et = await er.text();
-        let ed; try { ed = JSON.parse(et); } catch(_){ ed = { ok:false }; }
-        if(ed.ok){
-          toast('IA ATIVADA ✓ + primeira resposta enviada 🤖','');
-          // Fecha o modal
-          if(typeof fecharIAPrev === 'function') fecharIAPrev();
-          else { const bg = qs('#iaPrevBack'); if(bg) bg.style.display = 'none'; }
-          // Recarrega msgs pra mostrar a nova
-          if(typeof carregarMensagens === 'function') carregarMensagens();
-        } else {
-          toast('IA ATIVADA ✓ mas erro ao enviar msg: ' + (ed.erro||''), 'warn');
-        }
-      } catch(e){
-        toast('IA ATIVADA ✓ mas falhou envio da msg: ' + e.message, 'warn');
-      }
+async function ativarIAEEnviar(){
+  if(!conversaAtiva){ toast('Selecione uma conversa primeiro','warn'); return; }
+  const msgPreview = __IA_PREV_DADOS ? String(__IA_PREV_DADOS.mensagem || __IA_PREV_DADOS.sugestao || '').trim() : '';
+  if(!msgPreview){ toast('Carregue o preview da IA antes','warn'); return; }
+  const nome = conversaAtiva.nome || conversaAtiva.telefone;
+  const confirmTxt = 'ATIVAR a IA + ENVIAR essa primeira resposta pra ' + nome + ' agora?\n\nMensagem:\n"' + msgPreview.substring(0,200) + (msgPreview.length>200?'...':'') + '"';
+  if(!confirm(confirmTxt)) return;
+
+  const btn = qs('#iaPrevBtnAtivarEnviar');
+  const originalHtml = btn ? btn.innerHTML : '';
+  if(btn){ btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Processando...'; }
+  try {
+    // 1) Ativa IA
+    const togglePayload = JSON.stringify({ conta_id: conversaAtiva.conta_id, telefone: conversaAtiva.telefone, ativa: true });
+    const tr = await fetch(URL_IA_ATEND_TOGGLE, { method:'POST', headers:{'Content-Type':'text/plain;charset=UTF-8'}, body: togglePayload });
+    const tt = await tr.text();
+    let td; try { td = JSON.parse(tt); } catch(_){ td = { ok:false, erro:'resposta invalida (toggle)' }; }
+    if(!td.ok){ toast('Erro ao ativar IA: ' + (td.erro||'servidor'), 'err'); return; }
+
+    // 2) Envia a 1ª resposta
+    const execBody = JSON.stringify({ ...__IA_PREV_DADOS, usuario: USUARIO || 'admin' });
+    const er = await fetch(URL_IA_ATEND_EXECUTAR, { method:'POST', headers:{'Content-Type':'text/plain;charset=UTF-8'}, body: execBody });
+    const et = await er.text();
+    let ed; try { ed = JSON.parse(et); } catch(_){ ed = { ok:false, erro:'resposta invalida (executar)' }; }
+    if(ed.ok){
+      toast('IA ATIVADA ✓ + primeira resposta enviada 🤖','');
+      fecharIAPrev();
+      if(typeof carregarMensagens === 'function') carregarMensagens();
+      if(typeof carregarConversas === 'function') carregarConversas();
     } else {
-      toast('IA ' + (ativar?'ATIVADA':'PAUSADA') + ' nesta conversa ✓','');
+      toast('IA ativada ✓ mas erro ao enviar msg: ' + (ed.erro||''), 'warn');
     }
   } catch(e){
     toast('Erro: ' + e.message, 'err');
+  } finally {
+    if(btn){ btn.disabled = false; btn.innerHTML = originalHtml; }
   }
 }
 
