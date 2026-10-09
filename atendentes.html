@@ -736,7 +736,7 @@ async function deletar(usuario){
   if(!TOKEN){ location.href = LOGIN_URL; return; }
   try { localStorage.setItem('chat_token', TOKEN); } catch(_){}
   qs('#linkChat').href = location.pathname.includes('/webhook/') ? '/webhook/chat-app?token='+encodeURIComponent(TOKEN) : 'chat.html';
-  if(PAPEL !== 'ADM' && PAPEL !== 'admin'){
+  if(PAPEL !== 'ADM' && PAPEL !== 'admin' && PAPEL !== 'SUPER' && PAPEL !== 'super' && PAPEL !== 'ADMIN'){
     qs('#denied').style.display = 'block';
     return;
   }

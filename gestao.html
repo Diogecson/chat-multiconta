@@ -397,7 +397,7 @@ const TOKEN = sessionStorage.getItem('chat_token') || localStorage.getItem('chat
 const USUARIO = sessionStorage.getItem('chat_usuario') || localStorage.getItem('chat_usuario') || '';
 const PAPEL = sessionStorage.getItem('chat_papel') || localStorage.getItem('chat_papel') || 'USER';
 if(!TOKEN || !USUARIO){ window.location.href='login.html'; }
-if(PAPEL !== 'ADM' && PAPEL !== 'admin'){ alert('Acesso restrito a administradores.'); window.location.href='chat.html'; }
+if(PAPEL !== 'ADM' && PAPEL !== 'admin' && PAPEL !== 'SUPER' && PAPEL !== 'super' && PAPEL !== 'ADMIN'){ alert('Acesso restrito a administradores.'); window.location.href='chat.html'; }
 
 let periodoAtual = 7;
 let chartDia = null;
