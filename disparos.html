@@ -593,7 +593,10 @@ function parseDest(){
     if(!tel || tel.length < 10) continue;
     if(seen.has(tel)) continue;
     seen.add(tel);
-    dest.push({ telefone: tel, nome: parts[1] || '' });
+    // parts[0]=tel, parts[1]=nome, parts[2+]=valores das variáveis {{2}}, {{3}}, ...
+    const nome = parts[1] || '';
+    const extras = parts.slice(2);
+    dest.push({ telefone: tel, nome, extra_vars: extras });
   }
   return dest;
 }
