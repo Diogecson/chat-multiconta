@@ -160,6 +160,13 @@ body{margin:0;background:var(--bg);font-family:'Inter',system-ui,sans-serif;colo
       <h2 class="card-title"><i class="bi bi-tag-fill" style="color:var(--orange)"></i> <span id="tituloConta">Templates</span></h2>
       <button class="btn btn-primary" id="btnNovo" onclick="abrirNovo()" disabled><i class="bi bi-plus-lg"></i> Novo template</button>
     </div>
+    <div id="tplSearchBox" style="display:none;padding:12px 20px;border-bottom:1px solid var(--line,#e2e8f0);background:#fafafa">
+      <div style="position:relative">
+        <i class="bi bi-search" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#94a3b8;font-size:.95rem"></i>
+        <input id="tplSearch" type="text" placeholder="Buscar por nome, texto do body, categoria..." oninput="filtrarTemplates()" style="width:100%;padding:9px 12px 9px 36px;border:1px solid var(--line,#e2e8f0);border-radius:8px;font-size:.9rem;background:#fff">
+        <span id="tplSearchCount" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);color:#64748b;font-size:.75rem;font-weight:600"></span>
+      </div>
+    </div>
     <div id="tplContainer">
       <div class="state"><i class="bi bi-arrow-left"></i>Selecione uma conta Meta na esquerda</div>
     </div>
@@ -300,8 +307,28 @@ async function selecionarConta(id){
   }catch(e){ qs('#tplContainer').innerHTML = '<div class="state" style="color:var(--err)"><i class="bi bi-wifi-off"></i>Erro: '+esc(e.message)+'</div>' }
 }
 function renderTemplates(){
+  // Mostra o campo de busca se tem templates
+  const sb = qs('#tplSearchBox');
+  if(sb) sb.style.display = templates.length ? 'block' : 'none';
   if(!templates.length){ qs('#tplContainer').innerHTML='<div class="state"><i class="bi bi-tag"></i>Nenhum template ainda. Clique em <b>Novo template</b> pra criar.</div>';return }
-  const rows = templates.map(t=>{
+  const termo = (qs('#tplSearch')?.value || '').toLowerCase().trim();
+  const filtrados = termo ? templates.filter(t => {
+    const body = (t.components||[]).find(c=>c.type==='BODY');
+    const bodyText = body ? body.text.toLowerCase() : '';
+    const nome = (t.name||'').toLowerCase();
+    const cat = (t.category||'').toLowerCase();
+    const lang = (t.language||'').toLowerCase();
+    const status = (t.status||'').toLowerCase();
+    return nome.includes(termo) || bodyText.includes(termo) || cat.includes(termo) || lang.includes(termo) || status.includes(termo);
+  }) : templates;
+  // Atualiza contador
+  const cnt = qs('#tplSearchCount');
+  if(cnt) cnt.textContent = termo ? `${filtrados.length}/${templates.length}` : `${templates.length} templates`;
+  if(!filtrados.length){
+    qs('#tplContainer').innerHTML = '<div class="state"><i class="bi bi-search"></i>Nenhum template encontrado pra "' + esc(termo) + '"</div>';
+    return;
+  }
+  const rows = filtrados.map(t=>{
     const body = (t.components||[]).find(c=>c.type==='BODY');
     const preview = body ? body.text : '';
     const stCls = (t.status||'').toLowerCase();
@@ -315,6 +342,8 @@ function renderTemplates(){
   }).join('');
   qs('#tplContainer').innerHTML = `<table class="tbl"><thead><tr><th>Nome</th><th style="width:120px">Categoria</th><th style="width:80px">Idioma</th><th style="width:60px">Vars</th><th style="width:110px">Status</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
+
+function filtrarTemplates(){ renderTemplates(); }
 
 /* ===== MODAL CRIAR ===== */
 let categoriaSel = 'MARKETING';
