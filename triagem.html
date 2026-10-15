@@ -209,6 +209,12 @@ body{margin:0;background:var(--bg);font-family:'Inter',system-ui,sans-serif;colo
     <input class="input" id="cfgPalavrasChave" type="text" placeholder="matrícula, bolsa, inscrição, quero estudar" style="margin-top:8px">
     <div class="helper">Separe por vírgula. Não faz diferença maiúscula/minúscula. Ex: <code>matrícula, bolsa, inscrição</code> — se o cliente digitar "quero fazer minha MATRÍCULA", aciona.</div>
 
+    <label class="lbl" style="margin-top:16px"><i class="bi bi-filter"></i> Ativar APENAS nas contas selecionadas (deixe vazio = todas)</label>
+    <div id="cfgContasBox" style="display:flex;flex-direction:column;gap:6px;padding:10px;border:1px solid var(--line,#e2e8f0);border-radius:8px;background:#fafafa;max-height:200px;overflow-y:auto">
+      <div style="font-size:.78rem;color:#64748b">Carregando contas...</div>
+    </div>
+    <div class="helper">Marque uma ou mais contas pra limitar a triagem só a elas. Se nenhuma marcada, ativa pra TODAS.</div>
+
     <label class="lbl">Mensagem inicial (enviada antes do 1º passo)</label>
     <textarea class="textarea" id="cfgMsgInicial" placeholder="Ex: Olá! Vou fazer algumas perguntas rápidas antes de te encaminhar..."></textarea>
 
@@ -439,8 +445,32 @@ async function excluirTriagem(){
 }
 
 // ======== CARREGAR ========
+let CONTAS_DISPONIVEIS = [];
+async function _carregarContasDisponiveis(){
+  try {
+    const tok = localStorage.getItem('chat_token') || '';
+    const r = await fetch(URL_BASE + '/webhook/chat-contas-list?token=' + encodeURIComponent(tok));
+    const j = await r.json();
+    CONTAS_DISPONIVEIS = (j.contas || []).filter(c => c.status === 'ativo' || !c.status);
+  } catch(_){ CONTAS_DISPONIVEIS = []; }
+}
+function renderContasBox(contasSelecionadas){
+  const sel = new Set((contasSelecionadas || []).map(String));
+  const box = qs('#cfgContasBox');
+  if(!box) return;
+  if(!CONTAS_DISPONIVEIS.length){
+    box.innerHTML = '<div style="font-size:.78rem;color:#64748b">Nenhuma conta cadastrada.</div>';
+    return;
+  }
+  box.innerHTML = CONTAS_DISPONIVEIS.map(c => {
+    const checked = sel.has(String(c.id)) ? 'checked' : '';
+    const tipo = c.tipo === 'meta' ? '<span style="font-size:.68rem;color:#1877f2;font-weight:700;margin-left:6px">OFICIAL</span>' : '<span style="font-size:.68rem;color:#25d366;font-weight:700;margin-left:6px">EVO</span>';
+    return `<label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:4px 0;font-size:.85rem"><input type="checkbox" class="cfg-conta-chk" value="${escapeHtml(c.id)}" ${checked} style="width:16px;height:16px;cursor:pointer"><span>${escapeHtml(c.nome || c.id)}</span>${tipo}</label>`;
+  }).join('');
+}
 async function carregar(){
   try{
+    await _carregarContasDisponiveis();
     const sep = URL_GET.includes('?')?'&':'?';
     const url = URL_GET + (TRIAGEM_ATUAL ? (sep + 'codigo=' + encodeURIComponent(TRIAGEM_ATUAL)) : '');
     const r = await api(url);
@@ -453,6 +483,7 @@ async function carregar(){
     qs('#cfgMsgInicial').value = cfg.mensagem_inicial || '';
     qs('#cfgMsgFinal').value = cfg.mensagem_final || '';
     qs('#cfgMaxTent').value = cfg.max_tentativas || 2;
+    renderContasBox(cfg.contas_ids || []);
     passos = r.passos || [];
     renderPassos();
   }catch(e){ toast('Erro: '+e.message,'err'); }
@@ -510,7 +541,8 @@ async function salvarConfig(){
   try{
     const ativa_por_palavra_chave = qs('#cfgAtivaKw').checked;
     const palavras_chave = qs('#cfgPalavrasChave').value.split(',').map(s => s.trim()).filter(Boolean);
-    const r = await api(URL_CFG, {method:'POST', bodyObj:{codigo: TRIAGEM_ATUAL || 'default', ativa_auto, ativa_por_palavra_chave, palavras_chave, mensagem_inicial, mensagem_final, max_tentativas}});
+    const contas_ids = Array.from(document.querySelectorAll('.cfg-conta-chk:checked')).map(el => el.value);
+    const r = await api(URL_CFG, {method:'POST', bodyObj:{codigo: TRIAGEM_ATUAL || 'default', ativa_auto, ativa_por_palavra_chave, palavras_chave, contas_ids, mensagem_inicial, mensagem_final, max_tentativas}});
     if(r.ok){ toast('Configuração salva.',''); }
     else toast('Erro: '+(r.erro||'servidor'),'err');
   }catch(e){ toast('Erro: '+e.message,'err'); }
